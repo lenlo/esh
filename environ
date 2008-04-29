@@ -1,0 +1,71 @@
+#
+#  This is the system wide environment configuration file.
+#
+#  Format:
+#   # comment
+#   [<keyword> ...]
+#   <variable>	<value>
+#   -<variable>
+#   ...
+#
+#  Any line or part of a line that begins with a hash sign (#) is regarded
+#  as a comment and will be ignored.
+#
+#  A line beginning with a left bracket ([) designates a conditional
+#  section and the environment definitions following it will only be
+#  performed if any of the space-separated keywords in the conditional 
+#  match.
+#
+#  Keywords will match the following:
+#
+#    all or "*"	-- always matches (the default if no keyword section is given)
+#    <username>	-- matches the current user
+#    <hostname>	-- matches the local host (fqdn or not)
+#    <OS>	-- matches hosts running the given OS
+#    <arch>	-- matches hosts based on the given architecture
+#
+#  All keyword comparisons are case insensitive.
+#
+#  Multiple conditional sections are tested in the order found and the
+#  corresponding environment definitions performed for each matching
+#  conditional.
+#
+#  An environment binding should have the variable separated from the
+#  value by whitespace.
+#
+#  The value will be interpreted as follows:
+#
+#    Any string prefixed by a dollar sign ($) and optionally enclosed by
+#    parenthesis (...) or braces {...} will be interpreted as another
+#    environment variable and its value looked up and substituted for
+#    the string.
+#
+#    Any string enclosed in backquotes (`...`) will be passed to a shell
+#    and executed as a command with the resulting output substituted for
+#    the string.
+#
+#  Instead of an enviroment binding, there can also be a "unbinding"
+#  which is designated by a variable prefixed by a hyphen (-).  When
+#  this is found, the corresponding variable will be removed from the
+#  environment.  This can be useful if a variable should be set in
+#  most cases, except under certain conditions (a general conditional
+#  adds it will a more specific conditional removes it).
+#
+#  A value normally ends at the end of the line, but very long values
+#  can be folded to multiple lines if each preceeding line ends with a
+#  backslash.  In addition to following the normal C rules for non-
+#  graphic characters such as \n, \r, \t, backslashes can also be used
+#  to escape embedded hash signs, dollar signs, backquotes, and other
+#  special characters.
+#
+#  Any variable bindings here can be overriden by the user in his or her
+#  ~/.environ file.
+#
+#  Note that all *PATH* variables will automatically be compressed using
+#  ppath(1) if esh was compiled with AUTO_PRUNE_PATHS defined.
+#
+
+SHELL	/bin/bash
+PS1	\\h:\\w \\u\\$\ 
+PATH	/usr/local/bin:$PATH
+MANPATH	/usr/local/share/man:$MANPATH

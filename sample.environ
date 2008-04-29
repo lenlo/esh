@@ -1,0 +1,56 @@
+#
+#  This is a private user environment configuration file.
+#
+#  See $(ETCDIR)/environ for a description of its format.
+#
+
+PATH		$HOME/bin:/usr/local/bin:/sw/bin:$PATH:/sbin:/usr/sbin:.
+# MANPATH	`echo $MANPATH | sed s./usr/X11R6/man:..`
+MANPATH		/usr/local/man:/sw/share/man:/usr/share/man:$MANPATH
+
+CFLAGS		-g -O
+CALFLAGS	-m
+DFFLAGS		-h
+LSFLAGS		-BF --color=auto
+LSWDIROPTIONS	BDFHW
+EDITOR		emacs
+PAGER		less
+RSYNC_RSH	ssh
+SSH_AUTH_SOCK	`ssh-auto-agent`
+ESHFLAGS	-N
+
+[Biohazard]
+PS1A		\\[\\e[0;33m\\]
+PATH		$PATH:obj-lin:bin-lin
+
+[Lenux]
+PS1A		\\[\\e[0;36m\\]
+LSFLAGS		${LSFLAGS}v
+PATH		$PATH:obj-lin:bin-lin
+
+[One]
+PS1A		\\[\\e[0;34m\\]
+
+[Neo]
+PS1A		\\[\\e[0;35m\\]
+
+[Darwin]
+LSFLAGS		-Fw
+PATH		$PATH:obj-mac:bin-mac
+-CALFLAGS
+-DFFLAGS
+
+[Root]
+PS1B		\\[\\e[0;31m\\]\\\$
+
+[All]
+PS1		\\[\\e[0;32m\\][\\t]${PS1A}\\h:\\w${PS1B}\\\$\\[\\e[0m\\]\\040
+-PS1A
+-PS1B
+
+[None]
+GNU_PORT	21490
+GNU_HOST	xxx
+GNU_NODE	/ggp@`hostname`
+EDITOR		gnuclient
+# alias gc=gnuclient

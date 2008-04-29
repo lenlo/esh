@@ -1,0 +1,9 @@
+It's very simple:
+
+* Change BINDIR or ETCDIR in Makefile if needed.
+* Run make.
+
+When satisfied:
+* Make sure that $(BINDIR)/esh is listed in /etc/shells.
+* Update environ if needed.
+* Run make install.
