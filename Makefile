@@ -15,20 +15,20 @@ MKDIR=	mkdir -p
 
 CFLAGS=	-O -g -Wall -DAUTO_PRUNE_PATH -DREMOVE_EMPTY_PATHS \
 	-DDISABLE_NONINTERACIVE_PS1 -DETCDIR=\"$(ETCDIR)\" \
-	#-DHAVE_WRITABLE_STRINGS -fwritable-strings
+	$(EXTRACFLAGS) #-DHAVE_WRITABLE_STRINGS -fwritable-strings
 
 all:	ppath esh
 
 ppath:	ppath.o ppathmain.o
-	$(CC) -g -o ppath ppath.o ppathmain.o
+	$(CC) -g $(EXTRACFLAGS) -o ppath ppath.o ppathmain.o
 
 esh:	esh.o ppath.o
-	$(CC) -g -o esh esh.o ppath.o
+	$(CC) -g $(EXTRACFLAGS)  -o esh esh.o ppath.o
 
 install:	all $(BINDIR) $(ETCDIR)
 	$(INSTALL) ppath esh $(BINDIR)
-	$(COPY) environ $(ETCDIR)
 	$(COPY) esh.1 $(MANDIR)
+	test -f "$(ETCDIR)/environ" || $(COPY) environ $(ETCDIR)
 
 $(BINDIR) $(ETCDIR):
 	$(MKDIR) $@
