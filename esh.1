@@ -5,7 +5,9 @@ esh \- the environmental meta-shell
 .BR esh
 .RB [\| -B
 |
-.BR -C \|]
+.B -C
+|
+.BR -X \|]
 .RB [\| -D \|]
 .RB [\| -E
 .IR sysenv \|]
@@ -165,9 +167,15 @@ should replace itself with after having set up the initial environment.  This
 option will override the normal procedure of selecting the shell from the
 SHELL environment variable (or by looking at the user's .shell file, if one
 exists).
+.TP
+.B \-X
+Don't create a new shell, but rather print out the environment bindings in
+.I "Emacs Lisp"
+format, suitable for being sourced by GNU Emacs.
 .SH EXAMPLES
 .nf
 .ta \w'OPENWINHOME   'u
+152
 % chsh
 Old shell: /usr/local/bin/tcsh
 New shell: /usr/local/bin/esh

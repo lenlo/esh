@@ -44,6 +44,7 @@
 #define NO_FORMAT	0
 #define SH_FORMAT	1
 #define CSH_FORMAT	2
+#define LISP_FORMAT	3
 
 extern char **environ;
 
@@ -131,6 +132,7 @@ procargs(int argc, char **argv)
 	      case 'L': argv[0][0] = '-';	break;
 	      case 'N': if (argv[0][0] == '-') argv[0][0] = 'x'; break;
 	      case 'S': Shell = argopt(argc, argv, &argi); break;
+	      case 'X': ShellOut = LISP_FORMAT; break;
 	      default:
 		if (opt[-1] != '-')
 		    usage(argv[0]);
@@ -142,6 +144,39 @@ procargs(int argc, char **argv)
     }
     
     return argi;
+}
+
+void
+printenv(char *var, char *val)
+{
+    switch (ShellOut) {
+      case SH_FORMAT:
+	printf("%s=", var);
+	if (val != NULL) {
+	    putchar('=');
+	    fprintq(stdout, val);
+	}
+	printf("; export %s\n", var);
+	break;
+
+      case CSH_FORMAT:
+	printf("setenv %s", var);
+	if (val != NULL) {
+	    putchar(' ');
+	    fprintq(stdout, val);
+	}
+	putchar('\n');
+	break;
+
+      case LISP_FORMAT:
+	printf("(setenv \"%s\"", var);
+	if (val != NULL) {
+	    putchar(' ');
+	    fprintq(stdout, val);
+	}
+	printf(")\n");
+	break;
+    }
 }
 
 int
@@ -255,35 +290,18 @@ main(argc, argv)
     /*
      *  Only do shell source output?
      */
-    switch (ShellOut) {
-      case SH_FORMAT:
+    if (ShellOut != NO_FORMAT) {
 	for (ee = environ; *ee != NULL; ee++) {
 	    p = index(*ee, '=');
-	    if (p == NULL)
-		printf("%s=; export %s\n", *ee, *ee);
-	    else {
+	    if (p == NULL) {
+		printenv(*ee, NULL);
+	    } else {
 		*p = '\0';
-		printf("%s=", *ee);
-		if (p[1] != '\0')
-		    fprintq(stdout, p + 1);
-		printf("; export %s\n", *ee);
-	    }
-	}
-	exit(0);
-      case CSH_FORMAT:
-	for (ee = environ; *ee != NULL; ee++) {
-	    p = index(*ee, '=');
-	    if (p == NULL)
-		printf("setenv %s\n", *ee);
-	    else {
-		*p = '\0';
-		printf("setenv %s ", *ee);
-		if (p[1] != '\0')
-		    fprintq(stdout, p + 1);
-		putchar('\n');
+		printenv(*ee, p + 1);
 		*p = '=';
 	    }
 	}
+
 	exit(0);
     }
 
@@ -862,13 +880,24 @@ fprintq(stream, string)
 {
     char *p;
 
-    putc('\'', stream);
-    for (p = string; *p != '\0'; p++)
-	if (*p == '\'')
-	    fputs("'\"'\"'", stream);
-	else
+    if (ShellOut == LISP_FORMAT) {
+	putc('"', stream);
+	for (p = string; *p != '\0'; p++) {
+	    if (*p == '"' || *p == '\\')
+		putc('\\', stream);
 	    putc(*p, stream);
-    putc('\'', stream);
+	}
+	putc('"', stream);
+
+    } else {
+	putc('\'', stream);
+	for (p = string; *p != '\0'; p++)
+	    if (*p == '\'')
+		fputs("'\"'\"'", stream);
+	    else
+		putc(*p, stream);
+	putc('\'', stream);
+    }
 }
 
 /*
