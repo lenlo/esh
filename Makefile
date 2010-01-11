@@ -25,12 +25,12 @@ ppath:	ppath.o ppathmain.o
 esh:	esh.o ppath.o
 	$(CC) -g $(EXTRACFLAGS)  -o esh esh.o ppath.o
 
-install:	all $(BINDIR) $(ETCDIR)
+install:	all $(BINDIR) $(ETCDIR) $(MANDIR)
 	$(INSTALL) ppath esh $(BINDIR)
 	$(COPY) esh.1 $(MANDIR)
 	test -f "$(ETCDIR)/environ" || $(COPY) environ $(ETCDIR)
 
-$(BINDIR) $(ETCDIR):
+$(BINDIR) $(ETCDIR) $(MANDIR):
 	$(MKDIR) $@
 
 clean:	;-rm esh ppath *.o
