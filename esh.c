@@ -12,7 +12,9 @@
  **	in /etc/passwd and will take the real shell from the user's SHELL
  **	environment variable, or from the user's ~/.shell file.
  **
- **	Lennart Lovstrand, Rank Xerox EuroPARC, Tue Jan 16 19:16:16 1990
+ **	Copyright (c) 1990-2010, Lennart Lovstrand <esh@lenlolabs.com>
+ **
+ **	First version: Tue Jan 16 19:16:16 1990
  **	Last edited: Thu May 27 16:18:06 2004
  **/
 

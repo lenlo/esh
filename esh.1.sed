@@ -202,8 +202,7 @@ MANPATH	$HOME/man:$MANPATH
 .fi
 .SH AUTHOR
 .nf
-Lennart Lovstrand <Lovstrand@EuroPARC.Xerox.COM>
-Rank Xerox EuroPARC, Cambridge, England.
+Lennart Lovstrand <esh@lenlolabs.com>
 .fi
 .SH "SEE ALSO"
 .IR csh (1),
