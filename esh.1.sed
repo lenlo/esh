@@ -29,7 +29,7 @@ is not as an interactive program, but rather as the value of shell field
 in /etc/passwd.  When the user logs in and is given
 .I esh
 as his shell, it will start by scanning a site wide environment file,
-/etc/environ, for variable bindings and create an initial environment.  It
+ETCDIR/environ, for variable bindings and create an initial environment.  It
 will the proceed to read the user's personal environment file, ~/.environ, and
 augument the environment with his preferences.  It will then replace itself 
 with the user's real shell, as determined by the value of the environment
@@ -41,7 +41,7 @@ will transfer control to a predefined shell, currently /bin/csh.
 A typical site wide usage of
 .I esh
 would be to make it every user's shell in /etc/passwd.  The system
-administrator would then create a site specific /etc/environ that set up 
+administrator would then create a site specific ETCDIR/environ that set up 
 appropriate values for PATH, MANPATH, LD_LIBRARY_PATH, etc.  In the simplest
 case, the user would then create a .shell file in his home directory and
 stash the name of his preferred shell in there (or alternatively, make it a
@@ -73,7 +73,7 @@ This is useful in that it allows a user to freely add to an already
 existing path variable without having to worry about possible duplications or
 null entries.
 .PP
-The format of an environment binding in /etc/environ or .environ is as
+The format of an environment binding in ETCDIR/environ or .environ is as
 follows:
 .nf
 .ta 0.5i +\w'<name> [=] 'u
@@ -149,7 +149,7 @@ will print all environment bindings as they are parsed in addition to some
 other output.
 .TP
 .BI \-E " sysenv"
-The name of the system global environment file, by default /etc/environ.
+The name of the system global environment file, by default ETCDIR/environ.
 .TP
 .BI \-F " usrenv"
 The name of the user's personal environment file, by default ~/.environ.
