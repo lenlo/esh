@@ -67,5 +67,9 @@
 
 SHELL	/bin/bash
 PS1	\\h:\\w \\u\\$\ 
-PATH	/usr/local/bin:$PATH
-MANPATH	/usr/local/share/man:$MANPATH
+
+# Add /usr/local to all paths
+PATH		/usr/local/bin:$PATH
+MANPATH		/usr/local/share/man:$MANPATH
+C_INCLUDE_PATH	/usr/local/include:$C_INCLUDE_PATH
+LIBRARY_PATH	/usr/local/lib:$LIBRARY_PATH
