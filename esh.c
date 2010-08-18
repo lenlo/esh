@@ -603,26 +603,36 @@ readbinding(stream)
 
 	/* Is it a conditional "[name]" section? */
 	if (*p == '[') {
-	    char *n, name[256];
+	    char *n, name[1024];
+	    int inexec = FALSE;
 
 	    /* Assume that we will ignore this section */
 	    ignore = TRUE;
 
 	    for (n = name, p++; *p != '\0'; p++) {
-		if (isspace(*p) || *p == ']') {
+		if (!inexec && (isspace(*p) || *p == ']')) {
 		    *n = '\0';
-		    if (conditional(name)) {
+		    if (n > name && conditional(name)) {
 			ignore = FALSE;
 			break;
 		    }
-		    while (*p != '\0' && isspace(*p)) p++;
 		    n = name;
-
-		    if (*p-- == ']')
-			break;
+		} else if (*p == '`') {
+		    if (inexec) {
+			*n = '\0';
+			if (system(name) == 0) {
+			    ignore = FALSE;
+			    break;
+			}
+			n = name;
+		    }
+		    inexec = !inexec;
 		} else if (n < &name[sizeof(name)-1]) {
 		    *n++ = *p;
 		}
+
+		if (*p == ']')
+		    break;
 	    }
 	    continue;
 	}
