@@ -18,11 +18,12 @@
 #define FALSE		0
 
 extern char *ppath();
+extern int ppath_remove_empty_subpaths;
 
 void usage(pname)
 char *pname;
 {
-    fprintf(stderr, "usage: %s path\n", pname);
+    fprintf(stderr, "usage: %s [-z] [-e] path\n", pname);
     exit(1);
 }
 
@@ -31,10 +32,30 @@ main(argc, argv)
 int argc;
 char **argv;
 {
-    if (argc != 2)
+    int ac;
+    int next_is_path = FALSE;
+
+    for (ac = 1; ac < argc && argv[ac][0] == '-' && !next_is_path; ac++) {
+	const char *opt;
+	for (opt = &argv[ac][1]; *opt != '\0'; opt++) {
+	    switch (*opt) {
+	      case 'e':
+		next_is_path = TRUE;
+		break;
+	      case 'z':
+		ppath_remove_empty_subpaths = TRUE;
+		break;
+	      default:
+		usage(argv[0]);
+		break;
+	    }
+	}
+    }
+
+    if (argc - ac != 1)
 	usage(argv[0]);
 
-    printf("%s\n", ppath(argv[1]));
+    printf("%s\n", ppath(argv[ac]));
 
     return 0;
 }

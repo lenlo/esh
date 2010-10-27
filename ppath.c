@@ -18,6 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+int ppath_remove_empty_subpaths = -1;
+
 static char *xalloc(int);
 char **breakup(char *), **remove_duplicates(char **);
 
@@ -25,9 +27,16 @@ char *
 ppath(path)
 char *path;
 {
+    int remove_empty_subpaths = ppath_remove_empty_subpaths;
+
     char *result, **strings, **pp;
     int length = 0;
     int colon;
+
+    if (remove_empty_subpaths == -1) {
+	remove_empty_subpaths =
+	    (getenv("PPATH_REMOVE_EMPTY_SUBPATHS") != NULL);
+    }
 
     strings = remove_duplicates(breakup(path));
 
@@ -39,10 +48,8 @@ char *path;
 
     colon = FALSE;
     for (pp = strings; *pp != NULL; pp++) {
-#ifdef REMOVE_EMPTY_PATHS
-	if (**pp == '\0')
+	if (remove_empty_subpaths && **pp == '\0')
 	    continue;
-#endif
 	if (colon)
 	    (void) strcat(result, ":");
 	else

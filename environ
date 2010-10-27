@@ -44,6 +44,9 @@
 #    and executed as a command with the resulting output substituted for
 #    the string.
 #
+#  If the variable with a question mark (?), it will only be set if it
+#  wasn't set before.
+#
 #  Instead of an enviroment binding, there can also be a "unbinding"
 #  which is designated by a variable prefixed by a hyphen (-).  When
 #  this is found, the corresponding variable will be removed from the
@@ -61,12 +64,18 @@
 #  Any variable bindings here can be overriden by the user in his or her
 #  ~/.environ file.
 #
-#  Note that all *PATH* variables will automatically be compressed using
-#  ppath(1) if esh was compiled with AUTO_PRUNE_PATHS defined.
+#  Note that all PATH variables will automatically be compressed using
+#  ppath if ESH_AUTO_PRUNE_PATHS defined.
+#
+#  Also, all expansions (i.e. $FOO and `foo`) that yield empty strings will 
+#  have any surrounding colons (":") removed.  This makes it a lot easier to
+#  incrementally build paths using constructs like "FOO $FOO:...".
 #
 
-SHELL	/bin/bash
-PS1	\\h:\\w \\u\\$\ 
+ESH_AUTO_PRUNE_PATHS
+
+?SHELL	/bin/bash
+?PS1	\\h:\\w \\u\\$\ 
 
 # Add /usr/local to all paths
 PATH		/usr/local/bin:$PATH

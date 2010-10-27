@@ -1,5 +1,5 @@
 /**
- **	ESH version 1.4.1
+ **	ESH version 1.5
  **
  **	The Environmental Shell is intended as an intermediary between
  **	/bin/login and the activation of a user's real shell.  Its purpose
@@ -15,7 +15,7 @@
  **	Copyright (c) 1990-2010, Lennart Lovstrand <esh@lenlolabs.com>
  **
  **	First version: Tue Jan 16 19:16:16 1990
- **	Last edited: Thu May 27 16:18:06 2004
+ **	Last edited: Tue Oct 26 16:58:03 2010
  **/
 
 #include <stdio.h>
@@ -382,9 +382,15 @@ readenv(file)
     }
 
     while ((binding = readbinding(stream)) != NULL) {
+	char *name = binding;
+
 	if (Debug)
 	    fprintf(stderr, "[%s]\n", binding);
-	ee = bassoc(binding[0] == '-' ? &binding[1] : binding, environ);
+
+	if (*name == '-' || *name == '?' || *name == '\\')
+	    name++;
+
+	ee = bassoc(name, environ);
 	if (*binding == '-'
 #ifdef DISABLE_NONINTERACTIVE_PS1
 	    || (!interactive && strncmp(binding, "PS1=", 4) == 0)
@@ -402,7 +408,7 @@ readenv(file)
 		*ee++ = binding;
 		*ee = NULL;
 	    }
-	} else {
+	} else if (binding[0] != '?') {
 	    /* (void) free(*ee); -- if only we knew it was malloced */
 	    *ee = binding;
 	}
@@ -550,6 +556,11 @@ int conditional(const char *name)
     return FALSE;
 }
 
+int
+auto_prune_paths()
+{
+    return getenv("ESH_AUTO_PRUNE_PATHS") != NULL;
+}
 
 /*
  *	Read a binding from the stream and return it in the form "name=value".
@@ -567,9 +578,7 @@ readbinding(stream)
 {
     char *p, *b, buf[BIGBUFSIZ];
     char *name, *value;
-#ifdef AUTO_PRUNE_PATH
     int pathp = FALSE;
-#endif /* AUTO_PRUNE_PATH */
     int ignore = FALSE;
 
     name = value = NULL;
@@ -652,12 +661,10 @@ readbinding(stream)
 		return mkbind(name, "");
 	    *p++ = '\0';
 
-#ifdef AUTO_PRUNE_PATH
 	    /* is this a path variable? */
-	    if (p - 5 >= b && strncmp(p - 5, "PATH", 4) == 0)
+	    if (auto_prune_paths() &&
+		p - 5 >= b && strncmp(p - 5, "PATH", 4) == 0)
 		pathp = TRUE;
-#endif /* AUTO_PRUNE_PATH */
-
 	    b = p;
 	}
 
@@ -698,7 +705,6 @@ readbinding(stream)
     }
     if (name == NULL)
 	return NULL;
-#ifdef AUTO_PRUNE_PATH
     if (pathp) {
 	extern char *ppath();
 	char *bind;
@@ -708,7 +714,6 @@ readbinding(stream)
 	free(value);
 	return bind;
     } else
-#endif /* AUTO_PRUNE_PATH */
 	return mkbind(name, interpret(value));
 }
 
@@ -720,29 +725,37 @@ char *
 interpret(string)
     char *string;
 {
-#ifndef HAVE_WRITABLE_STRINGS
     static char tmp[BIGBUFSIZ];
-#endif
     static char buf[BIGBUFSIZ];
+    int last_was_escaped = FALSE;
     char *p, *q;
 
     if (string == NULL)
 	return NULL;
 
-#ifdef HAVE_WRITABLE_STRINGS
-    p = string;
-#else
     p = strcpy(tmp, string);
-#endif
     q = buf;
 
     while (*p != '\0' && q < &buf[sizeof(buf)] - 1) {
+	char *oq = q;
+	int this_is_escaped = (*p == '\\');
+
 	switch (*p++) {
 	  case '$':
 	    expand(&p, &q, &buf[sizeof(buf)] - q);
+	    /* Got empty string with ':' before or after?  If so, remove ':' */
+	    if (q == oq && q > buf && q[-1] == ':' && !last_was_escaped)
+		q--;
+	    if (q == oq && *p == ':')
+		p++;
 	    break;
 	  case '`':
 	    compute(&p, &q, &buf[sizeof(buf)] - q);
+	    /* Got empty string with ':' before or after?  If so, remove ':' */
+	    if (q == oq && q > buf && q[-1] == ':' && !last_was_escaped)
+		q--;
+	    if (q == oq && *p == ':')
+		p++;
 	    break;
 	  case '\\':
 	    switch (*p) {
@@ -758,7 +771,10 @@ interpret(string)
 	    break;
 	  default:
 	    *q++ = *(p-1);
+	    break;
 	}
+
+	last_was_escaped = this_is_escaped;
     }
     *q = '\0';
 
