@@ -39,6 +39,7 @@
 #define BIGBUFSIZ	8192
 #define ENVSIZ		1024
 #define REARGSIZ	64
+#define MAXKEYWORDS	64
 
 #define TRUE		1
 #define FALSE		0
@@ -53,7 +54,7 @@ extern char **environ;
 char *readbinding(FILE *), *interpret(char *), *newstr(char *);
 char **bassoc(char *, char **), *mkbind(char *, char *);
 void readenv(char *), fprintq(FILE *, char *), expand(char **, char **, int);
-void compute(char **, char **, int);
+void compute(char **, char **, int), init_keywords(void), list_keywords(void);
 
 char *EnvBuf[ENVSIZ];
 int Debug = FALSE; /* TRUE; */
@@ -131,6 +132,7 @@ procargs(int argc, char **argv)
 	      case 'D': Debug = !Debug;		break;
 	      case 'E': SysEnvFile = argopt(argc, argv, &argi);	break;
 	      case 'F': UsrEnvFile = argopt(argc, argv, &argi);	break;
+	      case 'K': list_keywords(); exit(0); break;
 	      case 'L': argv[0][0] = '-';	break;
 	      case 'N': if (argv[0][0] == '-') argv[0][0] = 'x'; break;
 	      case 'S': Shell = argopt(argc, argv, &argi); break;
@@ -196,6 +198,8 @@ main(argc, argv)
 
     (void) ftime(&before);
 #endif /* DEBUGTIME */
+
+    init_keywords();
 
     p = interpret(DEBUGFILE);
     if (p != NULL && access(p, F_OK) == 0)
@@ -441,114 +445,138 @@ mkbind(name, value)
 }
 
 /*
- *	Determine if a certain "[name]" conditional applies to us.
+ *	Keyword processing (aka conditional).
  */
-int conditional(const char *name)
-{
-    static const char *keywords[] = {
-	/* these will always match */
-	"*",
-	"all",
 
-	/* operating systems */
+static char *keywords[MAXKEYWORDS] = {
+    /* these will always match */
+    "*",
+    "all",
+
+    /* operating systems */
 #ifdef __linux__
-	"linux",
+    "linux",
 #endif
 #ifdef __APPLE__
-	"apple",
+    "apple",
 #endif	
 #ifdef DARWIN
-	"darwin",
+    "darwin",
 #endif
 #ifdef __MACH__
-	"mach",
+    "mach",
 #endif
 #ifdef __unix__
-	"unix"
+    "unix"
 #endif
 
 	/* architectures */
 #ifdef __i386__
-	"i386",
+    "i386",
 #endif
 #ifdef __i486__
-	"i486",
+    "i486",
 #endif
 #ifdef __i586__
-	"i586",
+    "i586",
 #endif
 #ifdef __i686__
-	"i686",
+    "i686",
 #endif
 #if defined(__i386__) || defined(__i486__) || defined(__i586__) || defined (__i686__)
-	"ixxx",
-	"intel",
+    "ixxx",
+    "intel",
 #endif
 #if defined(__ppc__) || defined(__POWERPC__) || defined(_ARCH_PPC)
-	"ppc",
-	"powerpc",
+    "ppc",
+    "powerpc",
 #endif
-	NULL
-    };
+    NULL
+};
 
-    static char *username = NULL;
-    static char *hostname = NULL;
-    static int got_uts;
-    static struct utsname uts;
-    const char **kk;
-    int len;
+/*
+ *	Add a new word to the list of known keywords.
+ */
+void add_keyword(const char *word)
+{
+    char **kk;
 
-    /* cache some stuff */
-    if (username == NULL) {
-	static char hostbuf[256];
+    /* Don't add NULL words */
+    if (word == NULL)
+	return;
 
-	username = getlogin();
-	if (username == NULL) {
-	    struct passwd *pw = getpwuid(getuid());
-	    if (pw != NULL)
-		username = pw->pw_name;
+    /* Check if we might already got it */
+    for (kk = keywords; *kk != NULL; kk++)
+	if (strcasecmp(*kk, word) == 0)
+	    return;
+
+    *kk = (char *) malloc(strlen(word) + 1);
+    strcpy(*kk, word);
+    *++kk = NULL;
+}
+
+/*
+ *	Fill up the keywords array with more words that apply to us.
+ */
+void init_keywords(void)
+{
+    struct utsname uts;
+    struct passwd *pw = getpwuid(getuid());
+    char hostbuf[256];
+    char *p;
+
+    add_keyword(getlogin());
+
+    if (pw != NULL)
+	add_keyword(pw->pw_name);
+
+    if (gethostname(hostbuf, sizeof(hostbuf)) == 0) {
+	add_keyword(hostbuf);
+
+	/* add all semi-qualified versions too */
+	for (p = strrchr(hostbuf, '.'); p != NULL; p = strrchr(hostbuf, '.')) {
+	    *p = '\0';
+	    add_keyword(hostbuf);
+	}
+    }
+
+    if (uname(&uts) == 0) {
+	/* [<os>], e.g. [Linux] or [Darwin] */
+	add_keyword(uts.sysname);
+
+	/* [<nodename>], e.g. [lenux.lan.lovstrand.com] or [neo] */
+	add_keyword(uts.nodename);
+
+	/* add all semi-qualified versions too */
+	for (p = strrchr(hostbuf, '.'); p != NULL; p = strrchr(hostbuf, '.')) {
+	    *p = '\0';
+	    add_keyword(hostbuf);
 	}
 
-	if (gethostname(hostbuf, sizeof(hostbuf)) == 0)
-	    hostname = hostbuf;
-
-	if (Debug)
-	    printf("# username = %s, hostname = %s\n", username, hostname);
-
-	got_uts = (uname(&uts) == 0);
+	/* [<machine>], e.g. [i686] or [Power Macintosh] */
+	add_keyword(uts.machine);
     }
+}
+
+void list_keywords(void)
+{
+    char **kk;
+
+    for (kk = keywords; *kk != NULL; kk++) {
+	printf("%s\n", *kk);
+    }
+}
+
+/*
+ *	Determine if a certain "[name]" conditional applies to us.
+ */
+int conditional(const char *name)
+{
+    char **kk;
 
     /* try all predefined keywords */
     for (kk = keywords; *kk != NULL; kk++) {
 	if (strcasecmp(name, *kk) == 0)
-	    return TRUE;
-    }
-
-    /* [<username>] will match the current user */
-    if (strcasecmp(name, username) == 0)
-	return TRUE;
-
-    /* [<hostname>] will match the local host */
-    if (strcasecmp(name, hostname) == 0)
-	return TRUE;
-
-    /* [<hostname>] will match a fqdn beginning with <hostname> too */
-    len = strlen(name);
-    if (strncasecmp(name, hostname, len) == 0 && hostname[len] == '.')
-	return TRUE;
-
-    /* try (most of) the uname fields too */
-    if (got_uts) {
-	/* [<os>], e.g. [Linux] or [Darwin] */
-	if (strcasecmp(name, uts.sysname) == 0)
-	    return TRUE;
-
-	/* [<nodename>], e.g. [lenux.lan.lovstrand.com] or [neo] */
-	if (strcasecmp(name, uts.nodename) == 0)
-	    return TRUE;
-
-	/* [<machine>], e.g. [i686] or [Power Macintosh] */
-	if (strcasecmp(name, uts.machine) == 0)
 	    return TRUE;
     }
 
