@@ -523,7 +523,7 @@ void init_keywords(void)
     struct utsname uts;
     struct passwd *pw = getpwuid(getuid());
     char hostbuf[256];
-    char *b, *e;
+    char *p;
 
     add_keyword(getlogin());
 
@@ -534,9 +534,13 @@ void init_keywords(void)
 	add_keyword(hostbuf);
 
 	/* add unqualified hostname + all versions of the domain name too */
-	for (b =  hostbuf; (e = strchr(b, '.')) != NULL; b = e) {
-	    *e++ = '\0';
-	    add_keyword(b);
+	p = strchr(hostbuf, '.');
+	if (p != NULL) {
+	    *p = '\0';
+	    add_keyword(hostbuf);
+	    do {
+		add_keyword(++p);
+	    } while ((p = strchr(p, '.')) != NULL);
 	}
     }
 
@@ -548,9 +552,13 @@ void init_keywords(void)
 	add_keyword(uts.nodename);
 
 	/* add unqualified hostname + all versions of the domain name too */
-	for (b =  uts.nodename; (e = strchr(b, '.')) != NULL; b = e) {
-	    *e++ = '\0';
-	    add_keyword(b);
+	p = strchr(uts.nodename, '.');
+	if (p != NULL) {
+	    *p = '\0';
+	    add_keyword(uts.nodename);
+	    do {
+		add_keyword(++p);
+	    } while ((p = strchr(p, '.')) != NULL);
 	}
 
 	/* [<machine>], e.g. [i686] or [Power Macintosh] */
