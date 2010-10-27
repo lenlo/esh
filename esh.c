@@ -516,6 +516,29 @@ void add_keyword(const char *word)
 }
 
 /*
+ *	Add qualified & unqualified hostname + all parent domains too.
+ *
+ *	Warning: Will trash hostname in the process.
+ */
+void add_keyword_hostname(char *hostname)
+{
+    char *p, *q;
+
+    add_keyword(hostname);
+
+    p = strchr(hostname, '.');
+    if (p != NULL) {
+	*p++ = '\0';
+	add_keyword(hostname);
+	while ((q = strchr(p, '.')) != NULL) {
+	    add_keyword(p);
+	    *q++ = '\0';
+	    p = q;
+	}
+    }
+}
+
+/*
  *	Fill up the keywords array with more words that apply to us.
  */
 void init_keywords(void)
@@ -523,43 +546,21 @@ void init_keywords(void)
     struct utsname uts;
     struct passwd *pw = getpwuid(getuid());
     char hostbuf[256];
-    char *p;
 
     add_keyword(getlogin());
 
     if (pw != NULL)
 	add_keyword(pw->pw_name);
 
-    if (gethostname(hostbuf, sizeof(hostbuf)) == 0) {
-	add_keyword(hostbuf);
-
-	/* add unqualified hostname + all versions of the domain name too */
-	p = strchr(hostbuf, '.');
-	if (p != NULL) {
-	    *p = '\0';
-	    add_keyword(hostbuf);
-	    do {
-		add_keyword(++p);
-	    } while ((p = strchr(p, '.')) != NULL);
-	}
-    }
+    if (gethostname(hostbuf, sizeof(hostbuf)) == 0)
+	add_keyword_hostname(hostbuf);
 
     if (uname(&uts) == 0) {
 	/* [<os>], e.g. [Linux] or [Darwin] */
 	add_keyword(uts.sysname);
 
 	/* [<nodename>], e.g. [lenux.lan.lovstrand.com] or [neo] */
-	add_keyword(uts.nodename);
-
-	/* add unqualified hostname + all versions of the domain name too */
-	p = strchr(uts.nodename, '.');
-	if (p != NULL) {
-	    *p = '\0';
-	    add_keyword(uts.nodename);
-	    do {
-		add_keyword(++p);
-	    } while ((p = strchr(p, '.')) != NULL);
-	}
+	add_keyword_hostname(uts.nodename);
 
 	/* [<machine>], e.g. [i686] or [Power Macintosh] */
 	add_keyword(uts.machine);
