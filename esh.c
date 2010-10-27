@@ -523,7 +523,7 @@ void init_keywords(void)
     struct utsname uts;
     struct passwd *pw = getpwuid(getuid());
     char hostbuf[256];
-    char *p;
+    char *b, *e;
 
     add_keyword(getlogin());
 
@@ -533,10 +533,10 @@ void init_keywords(void)
     if (gethostname(hostbuf, sizeof(hostbuf)) == 0) {
 	add_keyword(hostbuf);
 
-	/* add all semi-qualified versions too */
-	for (p = strrchr(hostbuf, '.'); p != NULL; p = strrchr(hostbuf, '.')) {
-	    *p = '\0';
-	    add_keyword(hostbuf);
+	/* add unqualified hostname + all versions of the domain name too */
+	for (b =  hostbuf; (e = strchr(b, '.')) != NULL; b = e) {
+	    *e++ = '\0';
+	    add_keyword(b);
 	}
     }
 
@@ -547,10 +547,10 @@ void init_keywords(void)
 	/* [<nodename>], e.g. [lenux.lan.lovstrand.com] or [neo] */
 	add_keyword(uts.nodename);
 
-	/* add all semi-qualified versions too */
-	for (p = strrchr(hostbuf, '.'); p != NULL; p = strrchr(hostbuf, '.')) {
-	    *p = '\0';
-	    add_keyword(hostbuf);
+	/* add unqualified hostname + all versions of the domain name too */
+	for (b =  uts.nodename; (e = strchr(b, '.')) != NULL; b = e) {
+	    *e++ = '\0';
+	    add_keyword(b);
 	}
 
 	/* [<machine>], e.g. [i686] or [Power Macintosh] */
