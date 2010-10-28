@@ -545,7 +545,7 @@ void init_keywords(void)
 {
     struct utsname uts;
     struct passwd *pw = getpwuid(getuid());
-    char hostbuf[256];
+    char hostbuf[1024];
 
     add_keyword(getlogin());
 
@@ -783,7 +783,7 @@ interpret(string)
 	    /* Got empty string with ':' before or after?  If so, remove ':' */
 	    if (q == oq && q > buf && q[-1] == ':' && !last_was_escaped)
 		q--;
-	    if (q == oq && *p == ':')
+	    else if (q == oq && *p == ':')
 		p++;
 	    break;
 	  case '`':
@@ -791,7 +791,7 @@ interpret(string)
 	    /* Got empty string with ':' before or after?  If so, remove ':' */
 	    if (q == oq && q > buf && q[-1] == ':' && !last_was_escaped)
 		q--;
-	    if (q == oq && *p == ':')
+	    else if (q == oq && *p == ':')
 		p++;
 	    break;
 	  case '\\':
