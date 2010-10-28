@@ -51,7 +51,7 @@
 
 extern char **environ;
 
-char *readbinding(FILE *), *interpret(char *), *newstr(char *);
+char *readbinding(FILE *), *interpret(char *, int), *newstr(char *);
 char **bassoc(char *, char **), *mkbind(char *, char *);
 void readenv(char *), fprintq(FILE *, char *), expand(char **, char **, int);
 void compute(char **, char **, int), init_keywords(void), list_keywords(void);
@@ -62,6 +62,7 @@ char *SysEnvFile = SYSENVFILE;
 char *UsrEnvFile = USRENVFILE;
 char *Shell = NULL;
 int ShellOut = NO_FORMAT;
+int AutoPrunePaths = FALSE;
 
 void
 usage(name)
@@ -135,6 +136,7 @@ procargs(int argc, char **argv)
 	      case 'K': list_keywords(); exit(0); break;
 	      case 'L': argv[0][0] = '-';	break;
 	      case 'N': if (argv[0][0] == '-') argv[0][0] = 'x'; break;
+	      case 'P': AutoPrunePaths = TRUE; break;
 	      case 'S': Shell = argopt(argc, argv, &argi); break;
 	      case 'X': ShellOut = LISP_FORMAT; break;
 	      default:
@@ -201,7 +203,7 @@ main(argc, argv)
 
     init_keywords();
 
-    p = interpret(DEBUGFILE);
+    p = interpret(DEBUGFILE, FALSE);
     if (p != NULL && access(p, F_OK) == 0)
 	Debug = TRUE;
 
@@ -233,15 +235,15 @@ main(argc, argv)
     /* add global environment */
     if (Debug)
 	printf("[--system environment--]\n");
-    readenv(interpret(SysEnvFile));
+    readenv(interpret(SysEnvFile, FALSE));
 
     /* add private environment */
     if (Debug)
 	printf("[--user environment--]\n");
-    readenv(interpret(UsrEnvFile));
+    readenv(interpret(UsrEnvFile, FALSE));
 
     /* reinterpret args in the environment (if any) */
-    envflags = interpret(getenv("ESHFLAGS"));
+    envflags = interpret(getenv("ESHFLAGS"), FALSE);
     if (envflags != NULL) {
 	char *xargs[] = {argv[0], envflags, NULL};
 	char **xargv = xargs;
@@ -257,10 +259,10 @@ main(argc, argv)
      * check ~/.shell to see what it should be.
      */
     if (Shell == NULL) {
-	Shell = interpret(USRSHELL);
+	Shell = interpret(USRSHELL, FALSE);
 
 	if (access(Shell, F_OK) < 0)
-	    Shell = interpret(SYSSHELL);
+	    Shell = interpret(SYSSHELL, FALSE);
 
 	if (access(Shell, X_OK) < 0) {
 	    /* not executable, assume text file with name of shell */
@@ -279,7 +281,7 @@ main(argc, argv)
 	    if ((p = index(buf, '\n')) != NULL)
 		*p = '\0';
 
-	    Shell = interpret(buf);
+	    Shell = interpret(buf, FALSE);
 	    (void) fclose(stream);
 	}
     }
@@ -596,7 +598,7 @@ int conditional(const char *name)
 int
 auto_prune_paths()
 {
-    return getenv("ESH_AUTO_PRUNE_PATHS") != NULL;
+    return AutoPrunePaths || (getenv("ESH_AUTO_PRUNE_PATHS") != NULL);
 }
 
 /*
@@ -746,12 +748,12 @@ readbinding(stream)
 	extern char *ppath();
 	char *bind;
 
-	value = ppath(interpret(value));
+	value = ppath(interpret(value, TRUE));
 	bind = mkbind(name, value);
 	free(value);
 	return bind;
     } else
-	return mkbind(name, interpret(value));
+	return mkbind(name, interpret(value, FALSE));
 }
 
 /*
@@ -759,8 +761,9 @@ readbinding(stream)
  *	(Result is static string)
  */
 char *
-interpret(string)
+interpret(string, pathcompress)
     char *string;
+    int pathcompress;
 {
     static char tmp[BIGBUFSIZ];
     static char buf[BIGBUFSIZ];
@@ -780,19 +783,27 @@ interpret(string)
 	switch (*p++) {
 	  case '$':
 	    expand(&p, &q, &buf[sizeof(buf)] - q);
-	    /* Got empty string with ':' before or after?  If so, remove ':' */
-	    if (q == oq && q > buf && q[-1] == ':' && !last_was_escaped)
-		q--;
-	    else if (q == oq && *p == ':')
-		p++;
+	    if (pathcompress && q == oq) {
+		/* Don't let an empty expansion lead to an empty
+		 * path component being created.
+		 */
+		if (q > buf && q[-1] == ':' && *p == '\0')
+		    q--;
+		else if ((q == buf || q[-1] == ':') && *p == ':')
+		    p++;
+	    }
 	    break;
 	  case '`':
 	    compute(&p, &q, &buf[sizeof(buf)] - q);
-	    /* Got empty string with ':' before or after?  If so, remove ':' */
-	    if (q == oq && q > buf && q[-1] == ':' && !last_was_escaped)
-		q--;
-	    else if (q == oq && *p == ':')
-		p++;
+	    if (pathcompress && q == oq) {
+		/* Don't let an empty expansion lead to an empty
+		 * path component being created.
+		 */
+		if (q > buf && q[-1] == ':' && *p == '\0')
+		    q--;
+		else if ((q == buf || q[-1] == ':') && *p == ':')
+		    p++;
+	    }
 	    break;
 	  case '\\':
 	    switch (*p) {
