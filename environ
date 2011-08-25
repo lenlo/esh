@@ -75,7 +75,7 @@
 ESH_AUTO_PRUNE_PATHS
 
 ?SHELL	/bin/bash
-?PS1	\\h:\\w \\u\\$\ 
+?PS1	\\h:\\w \\u\\\$\ 
 
 # Add /usr/local to all paths
 PATH		/usr/local/bin:$PATH

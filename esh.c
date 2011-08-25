@@ -1,10 +1,10 @@
 /**
- **	ESH version 1.5
+ **	ESH version 1.7
  **
- **	The Environmental Shell is intended as an intermediary between
- **	/bin/login and the activation of a user's real shell.  Its purpose
- **	is to set up a common environment for a all users on a particular
- **	system that can easily be changed by the superuser as needed.
+ **	The Environmental Meta Shell is intended as an intermediary between
+ **	/bin/login and the user's real shell.  Its purpose is to set up a
+ **	common environment for a all users on a particular system that can
+ **	easily be changed by the superuser as needed.
  **
  **	By default, esh will modify the already existing environment by
  **	reading bindings from /etc/environ before exec'ing the user's
@@ -12,10 +12,10 @@
  **	in /etc/passwd and will take the real shell from the user's SHELL
  **	environment variable, or from the user's ~/.shell file.
  **
- **	Copyright (c) 1990-2010, Lennart Lovstrand <esh@lenlolabs.com>
+ **	Copyright (c) 1990-2011, Lennart Lovstrand <esh@lenlolabs.com>
  **
  **	First version: Tue Jan 16 19:16:16 1990
- **	Last edited: Tue Oct 26 16:58:03 2010
+ **	Last edited: Thu Aug 25 02:11:15 2011
  **/
 
 #include <stdio.h>
@@ -31,13 +31,15 @@
 #endif /* DEBUGTIME */
 #include <pwd.h>
 
+#define ESHVERSION	"1.7"
+
 #define	SYSENVFILE	(ETCDIR "/environ")
 #define USRENVFILE	"$HOME/.environ"
 #define SYSSHELL	"${SHELL-/bin/csh}"
 #define USRSHELL	"$HOME/.shell"
 #define DEBUGFILE	"$HOME/.eshdebug"
 #define BIGBUFSIZ	8192
-#define ENVSIZ		1024
+#define ENVGROWTH	10
 #define REARGSIZ	64
 #define MAXKEYWORDS	64
 
@@ -49,14 +51,25 @@
 #define CSH_FORMAT	2
 #define LISP_FORMAT	3
 
+enum editop {
+    OP_DEFAULT,
+    OP_REPLACE,
+    OP_REMOVE,
+    OP_APPEND,
+};
+
 extern char **environ;
 
 char *readbinding(FILE *), *interpret(char *, int), *newstr(char *);
-char **bassoc(char *, char **), *mkbind(char *, char *);
+char **bassoc(const char *, char **), *mkbind(char *, char *);
 void readenv(char *), fprintq(FILE *, char *), expand(char **, char **, int);
 void compute(char **, char **, int), init_keywords(void), list_keywords(void);
+void *xalloc(void *mem, long siz);
+void editenv(enum editop op, const char *binding);
 
-char *EnvBuf[ENVSIZ];
+char **EnvBuf = NULL;
+int EnvSiz = 0;
+
 int Debug = FALSE; /* TRUE; */
 char *SysEnvFile = SYSENVFILE;
 char *UsrEnvFile = USRENVFILE;
@@ -68,7 +81,8 @@ void
 usage(name)
     char *name;
 {
-    fprintf(stderr, "usage: %s [-A args] [-B | -C] [-D] [-E sysenv] [-F usrenv] [-L | -N] [-S shell] [shell-args...]\n", name);
+    fprintf(stderr, "usage: %s [-A args] [-B | -C] [-D] [-E sysenv] "
+	    "[-F usrenv] [-L | -N] [-S shell] [shell-args...]\n", name);
     exit(1);
 }
 
@@ -78,7 +92,7 @@ void
 rearg(int *pargc, char ***pargv, int *pargi)
 {
     char *arg = (*pargv)[*pargi];
-    char **nargv = (char **) malloc(REARGSIZ * sizeof(char *));
+    char **nargv = (char **) xalloc(NULL, REARGSIZ * sizeof(char *));
     int argi = *pargi;
     int nargc;
     char *p = arg;
@@ -117,8 +131,12 @@ char *argopt(int argc, char **argv, int *pargi)
     return argv[*pargi];
 }
 
-int
-procargs(int argc, char **argv)
+void printversion(void)
+{
+    printf("Version: " ESHVERSION "\n");
+}
+
+int procargs(int argc, char **argv)
 {
     int argi;
 
@@ -138,6 +156,7 @@ procargs(int argc, char **argv)
 	      case 'N': if (argv[0][0] == '-') argv[0][0] = 'x'; break;
 	      case 'P': AutoPrunePaths = TRUE; break;
 	      case 'S': Shell = argopt(argc, argv, &argi); break;
+	      case 'V': printversion(); exit(0); break;
 	      case 'X': ShellOut = LISP_FORMAT; break;
 	      default:
 		if (opt[-1] != '-')
@@ -159,7 +178,6 @@ printenv(char *var, char *val)
       case SH_FORMAT:
 	printf("%s=", var);
 	if (val != NULL) {
-	    putchar('=');
 	    fprintq(stdout, val);
 	}
 	printf("; export %s\n", var);
@@ -190,9 +208,8 @@ main(argc, argv)
     int argc;
     char **argv;
 {
-    char **args;
-    char *p, **ee, **ff;
-    char buf[BUFSIZ];
+    char **args, **ee, **oldenv = environ;
+    char *p, buf[BUFSIZ];
     int argi;
     char *envflags;
 #ifdef DEBUGTIME
@@ -221,16 +238,12 @@ main(argc, argv)
     }
 
     /* copy old environment into a large enough buffer and replace it */
-    ee = environ;
-    ff = EnvBuf;
-    while (*ee != NULL && ff < EnvBuf + sizeof(EnvBuf) - 1)
-	/* avoid infinite recursion -- stomp out any SHELL=esh binding */
-	if (strncmp(*ee, "SHELL=", 6) == 0)
-	    ee++;
-	else
-	    *ff++ = *ee++;
-    *ff = NULL;
-    environ = EnvBuf;
+    for (ee = oldenv; *ee != NULL; ee++) {
+	/* avoid infinite recursion -- ignore any SHELL=esh binding */
+	if (strncmp(*ee, "SHELL=", 6) != 0) {
+	    editenv(OP_APPEND, *ee);
+	}
+    }
 
     /* add global environment */
     if (Debug)
@@ -300,6 +313,14 @@ main(argc, argv)
      */
     if (ShellOut != NO_FORMAT) {
 	for (ee = environ; *ee != NULL; ee++) {
+	    /* Don't print out old bindings that we haven't changed */
+	    for (; *oldenv != NULL; oldenv++) {
+		const char *eq = strchr(*oldenv, '=');
+		if (eq == NULL || strncmp(*ee, *oldenv, eq - *oldenv + 1) == 0)
+		    break;
+	    }
+	    if (*oldenv != NULL && *oldenv++ == *ee)
+		continue;
 	    p = index(*ee, '=');
 	    if (p == NULL) {
 		printenv(*ee, NULL);
@@ -371,7 +392,6 @@ readenv(file)
 {
     FILE *stream;
     char *binding;
-    register char **ee;
 #ifdef DISABLE_NONINTERACTIVE_PS1
     int interactive = isatty(0);
 #endif
@@ -388,36 +408,31 @@ readenv(file)
     }
 
     while ((binding = readbinding(stream)) != NULL) {
-	char *name = binding;
+	enum editop op = OP_REPLACE;
 
 	if (Debug)
 	    fprintf(stderr, "[%s]\n", binding);
 
-	if (*name == '-' || *name == '?' || *name == '\\')
-	    name++;
-
-	ee = bassoc(name, environ);
-	if (*binding == '-'
 #ifdef DISABLE_NONINTERACTIVE_PS1
-	    || (!interactive && strncmp(binding, "PS1=", 4) == 0)
+	if (!interactive && strncmp(binding, "PS1=", 4) == 0)
+	    op = OP_REMOVE;
 #endif
-	    ) {
-	    /* Remove binding */
-	    if (*ee != NULL) {
-		/* (void) free(*ee); -- if only we knew it was malloced */
-		do {
-		    ee[0] = ee[1];
-		} while (*ee++ != NULL);
-	    }
-	} else if (*ee == NULL) {
-	    if (ee < &EnvBuf[ENVSIZ - 1]) {
-		*ee++ = binding;
-		*ee = NULL;
-	    }
-	} else if (binding[0] != '?') {
-	    /* (void) free(*ee); -- if only we knew it was malloced */
-	    *ee = binding;
+
+	switch (*binding) {
+	  case '\\':
+	    binding++;
+	    break;
+	  case '-':
+	    op = OP_REMOVE;
+	    binding++;
+	    break;
+	  case '?':
+	    op = OP_DEFAULT;
+	    binding++;
+	    break;
 	}
+
+	editenv(op, binding);
     }
 
     if (stream != stdin)
@@ -433,13 +448,7 @@ char *
 mkbind(name, value)
     char *name, *value;
 {
-    char *buf;
-
-    buf = (char *) malloc(strlen(name) + 1 + strlen(value) + 1);
-    if (buf == NULL) {
-	perror("malloc");
-	exit(1);
-    }
+    char *buf = xalloc(NULL, strlen(name) + 1 + strlen(value) + 1);
 
     sprintf(buf, "%s=%s", name, value);
 
@@ -512,7 +521,7 @@ void add_keyword(const char *word)
 	if (strcasecmp(*kk, word) == 0)
 	    return;
 
-    *kk = (char *) malloc(strlen(word) + 1);
+    *kk = xalloc(NULL, strlen(word) + 1);
     strcpy(*kk, word);
     *++kk = NULL;
 }
@@ -725,20 +734,19 @@ readbinding(stream)
 	    break;
 
 	/* find end of value */
-	p += strlen(p) - 1;
-	if (*p == '\\') {
+	p += strlen(p);
+	if (p > value && p[-1] == '\\') {
 	    /* handle continuation */
-	    *p = '\0';
+	    *--p = '\0';
 	    b = p;
 	    continue;
 	} else {
 	    /* remove trailing blanks */
-	    while (p > value && isspace(*p))
+	    while (p > value && isspace(p[-1]))
 		p--;
-	    /* last space quoted?  if so, keep it */
-	    if (*p == '\\')
+	    if (p > value && p[-1] == '\\' && isspace(*p))
 		p++;
-	    p[1] = '\0';
+	    *p = '\0';
 	    break;
 	}
     }
@@ -767,7 +775,6 @@ interpret(string, pathcompress)
 {
     static char tmp[BIGBUFSIZ];
     static char buf[BIGBUFSIZ];
-    int last_was_escaped = FALSE;
     char *p, *q;
 
     if (string == NULL)
@@ -778,7 +785,6 @@ interpret(string, pathcompress)
 
     while (*p != '\0' && q < &buf[sizeof(buf)] - 1) {
 	char *oq = q;
-	int this_is_escaped = (*p == '\\');
 
 	switch (*p++) {
 	  case '$':
@@ -821,8 +827,6 @@ interpret(string, pathcompress)
 	    *q++ = *(p-1);
 	    break;
 	}
-
-	last_was_escaped = this_is_escaped;
     }
     *q = '\0';
 
@@ -929,11 +933,11 @@ compute(src, dst, dstlen)
  */
 char **
 bassoc(key, environ)
-    char *key;
+    const char *key;
     char **environ;
 {
     register char **ee;
-    register char *p, *q;
+    register const char *p, *q;
 
     for (ee = environ; *ee != NULL; ee++) {
 	for (p = key, q = *ee; *p == *q; p++, q++)
@@ -944,6 +948,52 @@ bassoc(key, environ)
     }
 
     return ee;
+}
+
+/*
+ * Edit our environment by defaulting, replacing, removing, or appending
+ * the given binding (which should be of the form "var=val").
+ */
+void
+editenv(enum editop op, const char *binding)
+{
+    static char **EnvEnd = NULL;
+    int envuse = EnvEnd - EnvBuf;
+    
+    if (op != OP_APPEND) {
+	char **ee = bassoc(binding, EnvBuf);
+	if (*ee != NULL) {
+	    switch (op) {
+		/* Only add the binding if the var is unbound */
+	      case OP_DEFAULT:
+		return;
+	      case OP_REPLACE:
+		/* Replace old binding */
+		*ee = (char *) binding;
+		return;
+	      case OP_REMOVE:
+		/* Remove existing binding */
+		for (; *ee != NULL; ee++) {
+		    ee[0] = ee[1];
+		}
+		EnvEnd--;
+		return;
+	      case OP_APPEND:
+		/* To keep the compiler happy... */
+		break;
+	    }
+	}
+    }
+
+    /* Append the new binding */
+    if (envuse == EnvSiz) {
+	EnvSiz += ENVGROWTH;
+	environ = EnvBuf = xalloc(EnvBuf, sizeof(char **) * (EnvSiz + 1));
+	EnvEnd = EnvBuf + envuse;
+    }
+    
+    *EnvEnd++ = (char *) binding;
+    *EnvEnd = NULL;
 }
 
 /*
@@ -983,15 +1033,25 @@ char *
 newstr(string)
     char *string;
 {
-    char *result;
-
-    result = (char *) malloc(strlen(string) + 1);
-    if (result == NULL) {
-	perror("malloc");
-	exit(1);
-    }
+    char *result = xalloc(NULL, strlen(string) + 1);
 
     (void) strcpy(result, string);
 
     return result;
+}
+
+/*
+ *	Attempt to (re)allocate siz bytes and exit on failure.
+ */
+void *
+xalloc(void *mem, long siz)
+{
+    mem = (mem == NULL) ? malloc(siz) : realloc(mem, siz);
+
+    if (mem == NULL) {
+	perror("malloc");
+	exit(1);
+    }
+
+    return mem;
 }
