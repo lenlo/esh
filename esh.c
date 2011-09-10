@@ -3,7 +3,7 @@
  **
  **	The Environmental Meta Shell is intended as an intermediary between
  **	/bin/login and the user's real shell.  Its purpose is to set up a
- **	common environment for a all users on a particular system that can
+ **	common environment for all users on a particular system that can
  **	easily be changed by the superuser as needed.
  **
  **	By default, esh will modify the already existing environment by
@@ -662,12 +662,13 @@ readbinding(stream)
 	if (*p == '[') {
 	    char *n, name[1024];
 	    int inexec = FALSE;
+	    int intest = FALSE;
 
 	    /* Assume that we will ignore this section */
 	    ignore = TRUE;
 
 	    for (n = name, p++; *p != '\0'; p++) {
-		if (!inexec && (isspace(*p) || *p == ']')) {
+		if (!inexec && !intest && (isspace(*p) || *p == ']')) {
 		    *n = '\0';
 		    if (n > name && conditional(name)) {
 			ignore = FALSE;
@@ -684,6 +685,23 @@ readbinding(stream)
 			n = name;
 		    }
 		    inexec = !inexec;
+		} else if (!intest && *p == '[') {
+		    intest = TRUE;
+		    *n++ = '[';
+		    *n++ = ' ';
+		} else if (intest && *p == ']') {
+		    if (n < &name[sizeof(name)-2]) {
+			*n++ = ' ';
+			*n++ = ']';
+		    }
+		    *n = '\0';
+		    if (system(name) == 0) {
+			ignore = FALSE;
+			break;
+		    }
+		    n = name;
+		    intest = FALSE;
+
 		} else if (n < &name[sizeof(name)-1]) {
 		    *n++ = *p;
 		}
