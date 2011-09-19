@@ -74,11 +74,12 @@
 
 ESH_AUTO_PRUNE_PATHS
 
-?SHELL	/bin/bash
-?PS1	\\h:\\w \\u\\\$\ 
+?MANPATH	/usr/share/man
+?PS1		\\h:\\w \\u\\\$\ 
+?SHELL		/bin/bash
 
 # Add /usr/local to all paths
-PATH		/usr/local/bin:$PATH
-MANPATH		/usr/local/share/man:$MANPATH
 C_INCLUDE_PATH	/usr/local/include:$C_INCLUDE_PATH
 LIBRARY_PATH	/usr/local/lib:$LIBRARY_PATH
+MANPATH		/usr/local/share/man:$MANPATH
+PATH		/usr/local/bin:$PATH
