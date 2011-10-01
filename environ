@@ -44,13 +44,13 @@
 #    and executed as a command with the resulting output substituted for
 #    the string.
 #
-#  If the variable with a question mark (?), it will only be set if it
-#  wasn't set before.
+#  If the variable is prefixed with a question mark (?), it will only be
+#  set if it wasn't set before (i.e. it's a default value).
 #
 #  Instead of an enviroment binding, there can also be a "unbinding"
-#  which is designated by a variable prefixed by a hyphen (-).  When
-#  this is found, the corresponding variable will be removed from the
-#  environment.  This can be useful if a variable should be set in
+#  which is designated by a variable prefixed by a minus sign (-). 
+#  When this is found, the corresponding variable will be removed from
+#  the environment.  This can be useful if a variable should be set in
 #  most cases, except under certain conditions (a general conditional
 #  adds it will a more specific conditional removes it).
 #
