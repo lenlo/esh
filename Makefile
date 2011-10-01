@@ -36,4 +36,4 @@ install:	all $(BINDIR) $(ETCDIR) $(MANDIR)
 $(BINDIR) $(ETCDIR) $(MANDIR):
 	$(MKDIR) $@
 
-clean:	;-rm esh ppath *.o
+clean:	;-rm esh ppath *.o esh.1
