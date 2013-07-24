@@ -740,7 +740,7 @@ readbinding(stream)
 
 	/* compact buffer if necessary */
 	if (p > b) {
-	    strcpy(b, p);
+	    memmove(b, p, strlen(p) + 1);
 	    p = b;
 	}
 
@@ -1006,7 +1006,7 @@ editenv(enum editop op, const char *binding)
     /* Append the new binding */
     if (envuse == EnvSiz) {
 	EnvSiz += ENVGROWTH;
-	environ = EnvBuf = xalloc(EnvBuf, sizeof(char **) * (EnvSiz + 1));
+	environ = EnvBuf = xalloc(EnvBuf, sizeof(char *) * (EnvSiz + 1));
 	EnvEnd = EnvBuf + envuse;
     }
     
