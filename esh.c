@@ -461,7 +461,6 @@ mkbind(name, value)
 
 static char *keywords[MAXKEYWORDS] = {
     /* these will always match */
-    "*",
     "all",
 
     /* operating systems */
@@ -588,6 +587,34 @@ void list_keywords(void)
 }
 
 /*
+ *	Basic '*' and '?' pattern matching
+ */
+int matches(const char *pat, const char *str)
+{
+    for (; *pat != '\0'; pat++) {
+	if (*pat == '*') {
+	    for (pat++;; str++) {
+		if (matches(pat, str))
+		    return TRUE;
+		if (*str == '\0')
+		    return FALSE;
+	    }
+
+	} else if (*pat == '?' && *str != '\0') {
+	    str++;
+
+	} else if (tolower(*pat) == tolower(*str)) {
+	    str++;
+
+	} else {
+	    return FALSE;
+	}
+    }
+
+    return *str == '\0';
+}
+
+/*
  *	Determine if a certain "[name]" conditional applies to us.
  */
 int conditional(const char *name)
@@ -596,7 +623,7 @@ int conditional(const char *name)
 
     /* try all predefined keywords */
     for (kk = keywords; *kk != NULL; kk++) {
-	if (strcasecmp(name, *kk) == 0)
+	if (matches(name, *kk))
 	    return TRUE;
     }
 
