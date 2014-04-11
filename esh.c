@@ -477,7 +477,7 @@ static char *keywords[MAXKEYWORDS] = {
     "mach",
 #endif
 #ifdef __unix__
-    "unix"
+    "unix",
 #endif
 
 	/* architectures */
@@ -501,6 +501,10 @@ static char *keywords[MAXKEYWORDS] = {
     "ppc",
     "powerpc",
 #endif
+#if defined(__arm__)
+    "arm",
+#endif
+
     NULL
 };
 
