@@ -143,6 +143,10 @@ int procargs(int argc, char **argv)
     for (argi = 1; argi < argc && argv[argi][0] == '-'; argi++) {
 	const char *opt;
 
+	/* "--" explicitly ends esh's arguments */
+	if (strcmp(argv[argi], "--") == 0)
+	    return argi + 1;
+
 	for (opt = &argv[argi][1]; *opt != '\0'; opt++) {
 	    switch (*opt) {
 	      case 'A': rearg(&argc, &argv, &argi); break;
