@@ -696,8 +696,10 @@ readbinding(stream)
 	/* Is it a conditional "[name]" section? */
 	if (*p == '[') {
 	    char *n, name[1024];
+	    char endexec = '\0';
 	    int inexec = FALSE;
 	    int intest = FALSE;
+	    int parens = 0;
 
 	    /* Assume that we will ignore this section */
 	    ignore = TRUE;
@@ -710,16 +712,22 @@ readbinding(stream)
 			break;
 		    }
 		    n = name;
-		} else if (*p == '`') {
-		    if (inexec) {
-			*n = '\0';
-			if (system(name) == 0) {
-			    ignore = FALSE;
-			    break;
-			}
-			n = name;
+		} else if (*p == endexec && parens == 0) {
+		    *n = '\0';
+		    if (system(name) == 0) {
+			ignore = FALSE;
+			break;
 		    }
-		    inexec = !inexec;
+		    n = name;
+		    inexec = FALSE;
+
+		} else if (!inexec && *p == '`') {
+		    inexec = TRUE;
+		    endexec = *p;
+		} else if (!inexec && *p == '$' && p[1] == '(') {
+		    p++;
+		    inexec = TRUE;
+		    endexec = ')';
 		} else if (!intest && *p == '[') {
 		    intest = TRUE;
 		    *n++ = '[';
@@ -739,6 +747,13 @@ readbinding(stream)
 
 		} else if (n < &name[sizeof(name)-1]) {
 		    *n++ = *p;
+
+		    if (inexec) {
+			if (*p == '(')
+			    parens++;
+			else if (*p == ')')
+			    parens--;
+		    }
 		}
 
 		if (*p == ']')
@@ -841,18 +856,24 @@ interpret(string, pathcompress)
 
 	switch (*p++) {
 	  case '$':
-	    expand(&p, &q, &buf[sizeof(buf)] - q);
-	    if (pathcompress && q == oq) {
-		/* Don't let an empty expansion lead to an empty
-		 * path component being created.
-		 */
-		if (q > buf && q[-1] == ':' && *p == '\0')
-		    q--;
-		else if ((q == buf || q[-1] == ':') && *p == ':')
-		    p++;
+	    if (*p != '(') {
+		expand(&p, &q, &buf[sizeof(buf)] - q);
+		if (pathcompress && q == oq) {
+		    /* Don't let an empty expansion lead to an empty
+		     * path component being created.
+		     */
+		    if (q > buf && q[-1] == ':' && *p == '\0')
+			q--;
+		    else if ((q == buf || q[-1] == ':') && *p == ':')
+			p++;
+		}
+		break;
 	    }
-	    break;
+	    p++;
+	    // FALL_THROUGH
+
 	  case '`':
+	    p--;
 	    compute(&p, &q, &buf[sizeof(buf)] - q);
 	    if (pathcompress && q == oq) {
 		/* Don't let an empty expansion lead to an empty
@@ -952,9 +973,23 @@ compute(src, dst, dstlen)
     char *p, *q, delim;
     FILE *pipe;
 
-    p = index(*src, '`');
-    if (p == NULL)
-	p = *src + strlen(*src);
+    if (src[0] == '$' && src[1] == '(') {
+	int parens = 0;
+	src += 2;
+	for (p = src; *p != '\0'; p++) {
+	    if (*p == '(') {
+		parens++;
+	    } else if (*p == ')') {
+		parens--;
+		if (parens < 0)
+		    break;
+	    }
+	}
+    } else if (*src == '`') {
+	p = index(*++src, '`');
+	if (p == NULL)
+	    p = *src + strlen(*src);
+    }
     delim = *p;
     *p = '\0';
 
