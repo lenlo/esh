@@ -869,7 +869,6 @@ interpret(string, pathcompress)
 		}
 		break;
 	    }
-	    p++;
 	    // FALL_THROUGH
 
 	  case '`':
@@ -966,40 +965,46 @@ expand(src, dst, dstlen)
  *	      with         ^=src       ^=dst
  */
 void
-compute(src, dst, dstlen)
-    char **src, **dst;
+compute(srcp, dstp, dstlen)
+    char **srcp, **dstp;
     int dstlen;
 {
-    char *p, *q, delim;
+    char *src = *srcp;
+    char *dst = *dstp;
+    char *p = NULL, *q, delim;
     FILE *pipe;
 
     if (src[0] == '$' && src[1] == '(') {
-	int parens = 0;
+	// $(...)
+	int parens = 1;
 	src += 2;
 	for (p = src; *p != '\0'; p++) {
 	    if (*p == '(') {
 		parens++;
 	    } else if (*p == ')') {
 		parens--;
-		if (parens < 0)
+		if (parens == 0)
 		    break;
 	    }
 	}
     } else if (*src == '`') {
-	p = index(*++src, '`');
-	if (p == NULL)
-	    p = *src + strlen(*src);
+	// `...`
+	p = index(++src, '`');
     }
+
+    if (p == NULL)
+	p = src + strlen(src);
+
     delim = *p;
     *p = '\0';
 
-    pipe = popen(*src, "r");
+    pipe = popen(src, "r");
     if (pipe == NULL) {
-	perror(*src);
+	perror(src);
     } else {
-	if (fgets(*dst, dstlen, pipe) == NULL)
-	    **dst = '\0';
-	if ((q = index(*dst, '\n')) != NULL)
+	if (fgets(dst, dstlen, pipe) == NULL)
+	    *dst = '\0';
+	if ((q = index(dst, '\n')) != NULL)
 	    *q = '\0';
 
 	pclose(pipe);
@@ -1009,8 +1014,9 @@ compute(src, dst, dstlen)
     if (delim != '\0')
 	p++;
 
-    *src = p;
-    *dst += strlen(*dst);
+    *srcp = p;
+    dst += strlen(dst);
+    *dstp = dst;
 }
 
 /*
