@@ -303,6 +303,9 @@ main(argc, argv)
 	}
     }
 
+    /* remove our internal temporary '_' variable */
+    editenv(OP_REMOVE, "_");
+
     /* rebind SHELL to point to the user-specified shell */
     editenv(OP_REPLACE, mkbind("SHELL", Shell));
 
@@ -676,12 +679,17 @@ readbinding(stream)
 	    if (*p == '\\' && p[1] == '#')
 		p++;
 	    else if (*p == '#') {
-		*p = '\0';
 		break;
 	    }
 	}
 
+	/* nuke all trailing spaces */
+	while (p > b && isspace(p[-1]) && (p == b + 1 || p[-2] != '\\'))
+	    p--;
+	*p = '\0';
+
 	p = b;
+	/* skip leading spaces */
 	while (*p != '\0' && isspace(*p))
 	    p++;
 	if (*p == '\0')
@@ -695,6 +703,14 @@ readbinding(stream)
 	    int intest = FALSE;
 	    int parens = 0;
 
+	    /* Scan forward looking for a possible trailing '_' binding */
+	    n = strrchr(p, ']');
+	    if (n != NULL) {
+		for (n++; *n != '\0' && isspace(*n); n++);
+		if (*n != '\0')
+		    editenv(OP_REPLACE, mkbind("_", interpret(n, FALSE)));
+	    }
+
 	    /* Assume that we will ignore this section */
 	    ignore = TRUE;
 
@@ -702,7 +718,7 @@ readbinding(stream)
 		if (!inexec && !intest && (isspace(*p) || *p == ']')) {
 		    /* Simple keyword, check if it's enabled */
 		    *n = '\0';
-		    if (n > name && conditional(name)) {
+		    if (ignore && n > name && conditional(name)) {
 			ignore = FALSE;
 			break;
 		    }
@@ -713,7 +729,7 @@ readbinding(stream)
 		     * Send it to the shell and see what exit code we get.
 		     */
 		    *n = '\0';
-		    if (system(name) == 0) {
+		    if (ignore && system(name) == 0) {
 			ignore = FALSE;
 			break;
 		    }
@@ -744,7 +760,7 @@ readbinding(stream)
 			*n++ = ']';
 		    }
 		    *n = '\0';
-		    if (system(name) == 0) {
+		    if (ignore && system(name) == 0) {
 			ignore = FALSE;
 			break;
 		    }
@@ -809,22 +825,14 @@ readbinding(stream)
 	if (*p == '\0')
 	    break;
 
-	/* find end of value */
+	/* check end of value */
 	p += strlen(p);
-	if (p > value && p[-1] == '\\') {
-	    /* handle continuation */
-	    *--p = '\0';
-	    b = p;
-	    continue;
-	} else {
-	    /* remove trailing blanks */
-	    while (p > value && isspace(p[-1]))
-		p--;
-	    if (p > value && p[-1] == '\\' && isspace(*p))
-		p++;
-	    *p = '\0';
+	if (p == value || p[-1] != '\\')
 	    break;
-	}
+
+	/* handle continuation */
+	*--p = '\0';
+	b = p;
     }
 
     if (name == NULL)
@@ -845,7 +853,7 @@ readbinding(stream)
 
 /*
  *	Interpret the given string with respect to variables etc.
- *	(Result is static string)
+ *	(Result is static shared string)
  */
 char *
 interpret(string, pathcompress)
