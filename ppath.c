@@ -70,14 +70,14 @@ breakup(path)
 
     parts = 1;
     p = path - 1;
-    while ((p = index(p + 1, ':')) != NULL)
+    while ((p = strchr(p + 1, ':')) != NULL)
 	parts++;
 
     result = (char **) malloc((parts + 1) * sizeof(char *));
 
     p = path;
     for (i = 0; i < parts; i++) {
-	q = index(p, ':');
+	q = strchr(p, ':');
 	if (q == NULL)
 	    q = &p[strlen(p)];
 	result[i] = xalloc(q - p + 1);

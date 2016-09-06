@@ -12,7 +12,7 @@
  **	in /etc/passwd and will take the real shell from the user's SHELL
  **	environment variable, or from the user's ~/.shell file.
  **
- **	Copyright (c) 1990-2011, Lennart Lovstrand <esh@lenlolabs.com>
+ **	Copyright (c) 1990-2016, Lennart Lovstrand <esh@lenlolabs.com>
  **
  **	First version: Tue Jan 16 19:16:16 1990
  **	Last edited: Thu Aug 25 02:11:15 2011
@@ -106,7 +106,7 @@ rearg(int *pargc, char ***pargv, int *pargi)
     }
 
     for (;;) {
-	p = index(p + 1, ' ');
+	p = strchr(p + 1, ' ');
 
 	if (p == NULL)
 	    break;
@@ -295,7 +295,7 @@ main(argc, argv)
 		exit(1);
 	    }
 
-	    if ((p = index(buf, '\n')) != NULL)
+	    if ((p = strchr(buf, '\n')) != NULL)
 		*p = '\0';
 
 	    Shell = interpret(buf, FALSE);
@@ -304,13 +304,7 @@ main(argc, argv)
     }
 
     /* rebind SHELL to point to the user-specified shell */
-    if ((ee = bassoc("SHELL", environ)) == NULL) {
-	*ee++ = mkbind("SHELL", Shell);
-	*ee = NULL;
-    } else {
-	/* (void) free(*ee); -- if only we knew it was malloced */
-	*ee =  mkbind("SHELL", Shell);
-    }
+    editenv(OP_REPLACE, mkbind("SHELL", Shell));
 
     /*
      *  Only do shell source output?
@@ -325,7 +319,7 @@ main(argc, argv)
 	    }
 	    if (*oldenv != NULL && *oldenv++ == *ee)
 		continue;
-	    p = index(*ee, '=');
+	    p = strchr(*ee, '=');
 	    if (p == NULL) {
 		printenv(*ee, NULL);
 	    } else {
@@ -343,7 +337,7 @@ main(argc, argv)
      * with a leading dash (if we're a login shell) and the name of the shell.
      */
     args = &argv[argi-1];
-    if ((p = rindex(Shell, '/')) == NULL)
+    if ((p = strrchr(Shell, '/')) == NULL)
 	p = Shell;
     /*
      * Hack Attack!  If the file begins with a dot (like .shell) and it is
@@ -357,7 +351,7 @@ main(argc, argv)
 	    if (len == sizeof(buf))
 		len--;
 	    buf[len] = '\0';
-	    if ((p = rindex(buf, '/')) == NULL)
+	    if ((p = strrchr(buf, '/')) == NULL)
 		p = buf;
 	}
     }
@@ -669,7 +663,7 @@ readbinding(stream)
     while (fgets(b, buf + sizeof(buf) - b, stream) != NULL) {
 
 	/* find newline and nuke it */
-	p = index(b, '\n');
+	p = strchr(b, '\n');
 	if (p == NULL)
 	    fprintf(stderr,
 		    "Warning: Line too long -- truncated after %d chars\n",
@@ -706,13 +700,18 @@ readbinding(stream)
 
 	    for (n = name, p++; *p != '\0'; p++) {
 		if (!inexec && !intest && (isspace(*p) || *p == ']')) {
+		    /* Simple keyword, check if it's enabled */
 		    *n = '\0';
 		    if (n > name && conditional(name)) {
 			ignore = FALSE;
 			break;
 		    }
 		    n = name;
+
 		} else if (*p == endexec && parens == 0) {
+		    /* It's the end of a `...` or $(...) expression.
+		     * Send it to the shell and see what exit code we get.
+		     */
 		    *n = '\0';
 		    if (system(name) == 0) {
 			ignore = FALSE;
@@ -722,17 +721,24 @@ readbinding(stream)
 		    inexec = FALSE;
 
 		} else if (!inexec && *p == '`') {
+		    /* The start of a `...` expression. */
 		    inexec = TRUE;
 		    endexec = *p;
+
 		} else if (!inexec && *p == '$' && p[1] == '(') {
+		    /* The start of a $(...) expression */
 		    p++;
 		    inexec = TRUE;
 		    endexec = ')';
+
 		} else if (!intest && *p == '[') {
+		    /* The start of a [...] test (q.v.) */
 		    intest = TRUE;
 		    *n++ = '[';
 		    *n++ = ' ';
+
 		} else if (intest && *p == ']') {
+		    /* The end of a [...] test */
 		    if (n < &name[sizeof(name)-2]) {
 			*n++ = ' ';
 			*n++ = ']';
@@ -746,6 +752,7 @@ readbinding(stream)
 		    intest = FALSE;
 
 		} else if (n < &name[sizeof(name)-1]) {
+		    /* Inside of something, keep copying it to the name buf */
 		    *n++ = *p;
 
 		    if (inexec) {
@@ -762,6 +769,7 @@ readbinding(stream)
 	    continue;
 	}
 
+	/* Ignore all bindings within a dissatisfied section */
 	if (ignore)
 	    continue;
 
@@ -818,8 +826,10 @@ readbinding(stream)
 	    break;
 	}
     }
+
     if (name == NULL)
 	return NULL;
+
     if (pathp) {
 	extern char *ppath();
 	char *bind;
@@ -828,8 +838,9 @@ readbinding(stream)
 	bind = mkbind(name, value);
 	free(value);
 	return bind;
-    } else
+    } else {
 	return mkbind(name, interpret(value, FALSE));
+    }
 }
 
 /*
@@ -989,7 +1000,7 @@ compute(srcp, dstp, dstlen)
 	}
     } else if (*src == '`') {
 	// `...`
-	p = index(++src, '`');
+	p = strchr(++src, '`');
     }
 
     if (p == NULL)
@@ -1004,7 +1015,7 @@ compute(srcp, dstp, dstlen)
     } else {
 	if (fgets(dst, dstlen, pipe) == NULL)
 	    *dst = '\0';
-	if ((q = index(dst, '\n')) != NULL)
+	if ((q = strchr(dst, '\n')) != NULL)
 	    *q = '\0';
 
 	pclose(pipe);
