@@ -8,6 +8,7 @@ PREFIX=	/usr/local
 ETCDIR=	$(PREFIX)/etc
 BINDIR=	$(PREFIX)/bin
 MANDIR=	$(PREFIX)/share/man/man1
+SHELLS=	/etc/shells
 
 INSTALL=install -c -s
 COPY=	cp -p
@@ -32,6 +33,11 @@ install:	all $(BINDIR) $(ETCDIR) $(MANDIR)
 	$(INSTALL) ppath esh $(BINDIR)
 	$(COPY) esh.1 $(MANDIR)
 	test -f "$(ETCDIR)/environ" || $(COPY) environ $(ETCDIR)
+	@if [ -e "$(SHELLS)" ] && ! fgrep -q /esh "$(SHELLS)"; then \
+	    echo; \
+	    echo "*** Note: You will need to manually add $(BINDIR)/esh to"; \
+	    echo "*** $(SHELLS) if you want to be able to have it as a login shell."; \
+	fi
 
 $(BINDIR) $(ETCDIR) $(MANDIR):
 	$(MKDIR) $@

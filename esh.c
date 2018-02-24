@@ -1,5 +1,5 @@
 /**
- **	ESH version 1.7
+ **	ESH version 1.8
  **
  **	The Environmental Meta Shell is intended as an intermediary between
  **	/bin/login and the user's real shell.  Its purpose is to set up a
@@ -12,10 +12,8 @@
  **	in /etc/passwd and will take the real shell from the user's SHELL
  **	environment variable, or from the user's ~/.shell file.
  **
- **	Copyright (c) 1990-2016, Lennart Lovstrand <esh@lenlolabs.com>
+ **	Copyright (c) 1990-2017, Lennart Lovstrand <esh@lenlolabs.com>
  **
- **	First version: Tue Jan 16 19:16:16 1990
- **	Last edited: Thu Aug 25 02:11:15 2011
  **/
 
 #include <stdio.h>
@@ -30,12 +28,13 @@
 #include <sys/timeb.h>
 #endif /* DEBUGTIME */
 #include <pwd.h>
+#include <sysexits.h>
 
-#define ESHVERSION	"1.7"
+#define ESHVERSION	"1.8"
 
 #define	SYSENVFILE	(ETCDIR "/environ")
 #define USRENVFILE	"$HOME/.environ"
-#define SYSSHELL	"${SHELL-/bin/csh}"
+#define SYSSHELL	"${SHELL-/bin/bash}"
 #define USRSHELL	"$HOME/.shell"
 #define DEBUGFILE	"$HOME/.eshdebug"
 #define BIGBUFSIZ	8192
@@ -50,6 +49,7 @@
 #define SH_FORMAT	1
 #define CSH_FORMAT	2
 #define LISP_FORMAT	3
+#define TEXT_FORMAT	4
 
 enum editop {
     OP_DEFAULT,
@@ -78,12 +78,14 @@ int ShellOut = NO_FORMAT;
 int AutoPrunePaths = FALSE;
 
 void
-usage(name)
-    char *name;
+usage(code, name)
+     int code;
+     char *name;
 {
-    fprintf(stderr, "usage: %s [-A args] [-B | -C] [-D] [-E sysenv] "
-	    "[-F usrenv] [-L | -N] [-S shell] [shell-args...]\n", name);
-    exit(1);
+    fprintf(stderr, "usage: %s [-A args] [-B | -C | -T | -X] [-D] "
+	    "[-E sysenv] [-F usrenv] [-H] [-K] [-L | -N] [-P] [-S shell] "
+	    "[-V] [shell-args...]\n", name);
+    exit(code);
 }
 
 /* arg should be "[-A ]xxx yyy ..." */
@@ -126,14 +128,14 @@ char *argopt(int argc, char **argv, int *pargi)
 {
     (*pargi)++;
     if (*pargi >= argc)
-	usage(argv[0]);
+	usage(EX_USAGE, argv[0]);
 
     return argv[*pargi];
 }
 
 void printversion(void)
 {
-    printf("Version: " ESHVERSION "\n");
+    printf("esh version: " ESHVERSION "\n");
 }
 
 int procargs(int argc, char **argv)
@@ -141,33 +143,42 @@ int procargs(int argc, char **argv)
     int argi;
 
     for (argi = 1; argi < argc && argv[argi][0] == '-'; argi++) {
-	const char *opt;
+	const char *opt = argv[argi];
 
 	/* "--" explicitly ends esh's arguments */
-	if (strcmp(argv[argi], "--") == 0)
+	if (strcmp(opt, "--") == 0) {
 	    return argi + 1;
+	} else if (strcmp(opt, "--version") == 0) {
+	    printversion();
+	    /* Pass "--version" to the real shell too */
+	    return argi;
+	} else if (strcmp(opt, "--help") == 0) {
+	    usage(EX_OK, argv[0]);
+	} else {
+	    for (opt++; *opt != '\0'; opt++) {
+		switch (*opt) {
+		  case 'A': rearg(&argc, &argv, &argi); break;
+		  case 'B': ShellOut = SH_FORMAT; break;
+		  case 'C': ShellOut = CSH_FORMAT; break;
+		  case 'D': Debug = !Debug; break;
+		  case 'E': SysEnvFile = argopt(argc, argv, &argi); break;
+		  case 'F': UsrEnvFile = argopt(argc, argv, &argi); break;
+		  case 'H': usage(0, argv[0]); break;
+		  case 'K': list_keywords(); exit(0); break;
+		  case 'L': argv[0][0] = '-'; break;
+		  case 'N': if (argv[0][0] == '-') argv[0][0] = 'x'; break;
+		  case 'P': AutoPrunePaths = TRUE; break;
+		  case 'S': Shell = argopt(argc, argv, &argi); break;
+		  case 'T': ShellOut = TEXT_FORMAT; break;
+		  case 'V': printversion(); exit(0); break;
+		  case 'X': ShellOut = LISP_FORMAT; break;
+		  default:
+		    if (opt[-1] != '-')
+			usage(EX_USAGE, argv[0]);
 
-	for (opt = &argv[argi][1]; *opt != '\0'; opt++) {
-	    switch (*opt) {
-	      case 'A': rearg(&argc, &argv, &argi); break;
-	      case 'B': ShellOut = SH_FORMAT;	break;
-	      case 'C': ShellOut = CSH_FORMAT;	break;
-	      case 'D': Debug = !Debug;		break;
-	      case 'E': SysEnvFile = argopt(argc, argv, &argi);	break;
-	      case 'F': UsrEnvFile = argopt(argc, argv, &argi);	break;
-	      case 'K': list_keywords(); exit(0); break;
-	      case 'L': argv[0][0] = '-';	break;
-	      case 'N': if (argv[0][0] == '-') argv[0][0] = 'x'; break;
-	      case 'P': AutoPrunePaths = TRUE; break;
-	      case 'S': Shell = argopt(argc, argv, &argi); break;
-	      case 'V': printversion(); exit(0); break;
-	      case 'X': ShellOut = LISP_FORMAT; break;
-	      default:
-		if (opt[-1] != '-')
-		    usage(argv[0]);
-
-		/* pass everything else on to shell */
-		return argi;
+		    /* pass everything else on to shell */
+		    return argi;
+		}
 	    }
 	}
     }
@@ -203,6 +214,14 @@ printenv(char *var, char *val)
 	    fprintq(stdout, val);
 	}
 	printf(")\n");
+	break;
+
+      case TEXT_FORMAT:
+	printf("%s", var);
+	if (val != NULL) {
+	    printf("\t%s", val);
+	}
+	putchar('\n');
 	break;
     }
 }
@@ -1146,11 +1165,8 @@ char *
 newstr(string)
     char *string;
 {
-    char *result = xalloc(NULL, strlen(string) + 1);
-
-    (void) strcpy(result, string);
-
-    return result;
+    int count = strlen(string) + 1;
+    return memcpy(xalloc(NULL, count), string, count);
 }
 
 /*

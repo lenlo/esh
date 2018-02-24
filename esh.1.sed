@@ -7,6 +7,8 @@ esh \- the environmental meta-shell
 |
 .B -C
 |
+.B -T
+|
 .BR -X \|]
 .RB [\| -D \|]
 .RB [\| -E
@@ -19,14 +21,12 @@ esh \- the environmental meta-shell
 .RI [\| shell_args\|.\|.\|. \|]
 .SH DESCRIPTION
 .I Esh
-is the environmental meta-shell (a.k.a.
-.IR green ).
-.I Esh
-performs the task of setting up a site and user specific initial environment
-before executing the user's real shell.  The intended usage of
+is an environmental meta-shell that performs the task of setting up
+the user's initial environment before executing the user's real shell.
+The intended usage of
 .I esh
-is not as an interactive program, but rather as the value of shell field
-in /etc/passwd.  When the user logs in and is given
+is not as an interactive program, but as the value of shell field in
+/etc/passwd. When the user logs in and is given
 .I esh
 as his shell, it will start by scanning a site wide environment file,
 ETCDIR/environ, for variable bindings and create an initial environment.  It
@@ -36,19 +36,20 @@ with the user's real shell, as determined by the value of the environment
 variable SHELL or by finding and inspecting ~/.shell in the user's home
 directory.  If neither of the above are found,
 .I esh
-will transfer control to a predefined shell, currently /bin/csh.
+will transfer control to a predefined shell, currently /bin/bash.
 .PP
 A typical site wide usage of
 .I esh
-would be to make it every user's shell in /etc/passwd.  The system
-administrator would then create a site specific ETCDIR/environ that set up 
-appropriate values for PATH, MANPATH, LD_LIBRARY_PATH, etc.  In the simplest
-case, the user would then create a .shell file in his home directory and
-stash the name of his preferred shell in there (or alternatively, make it a
-symbolic link to his shell).  Everything would then be the same as before, ie.
-environment variables would be set in .login for csh/tcsh users and .profile
-for sh/ksh/bash users, but with the added advantage of already having a
-reasonable environment.
+would be to make it every user's shell in /etc/passwd. The system
+administrator would then create a site specific ETCDIR/environ that
+sets up appropriate values for PATH, MANPATH, LD_LIBRARY_PATH, etc. In
+the simplest case, the user would then create a .shell file in his
+home directory and record the name of his preferred shell in there (or
+alternatively, make it a symbolic link to his/her shell). Everything
+would then be the same as before, i.e. environment variables would be
+set in .profile for sh/ksh/bash users and .login for csh/tcsh users,
+but with the added advantage of already having a reasonable
+environment.
 .PP
 Alternatively, the user could create a .environ file in his home directory and
 make all his environment bindings there.  This should include a value for
@@ -131,13 +132,13 @@ spawned, but control will be released back to the invoker.
 .SH OPTIONS
 .TP
 .B \-B
-Don't create a new shell, but rather print out the environment bindings in
+Don't create a new shell, just print out the environment bindings in
 .I "Bourne shell"
 format, suitable for being sourced by
 .IR sh (1).
 .TP
 .B \-C
-Don't create a new shell, but rather print out the environment bindings in
+Don't create a new shell, just print out the environment bindings in
 .I "C-shell"
 format, suitable for being sourced by
 .IR csh (1).
@@ -168,36 +169,38 @@ option will override the normal procedure of selecting the shell from the
 SHELL environment variable (or by looking at the user's .shell file, if one
 exists).
 .TP
+.B \-T
+Don't create a new shell, just print out the environment bindings in text format with tabs separating each variable from its value.
+.TP
 .B \-X
-Don't create a new shell, but rather print out the environment bindings in
+Don't create a new shell, just print out the environment bindings in
 .I "Emacs Lisp"
 format, suitable for being sourced by GNU Emacs.
 .SH EXAMPLES
 .nf
 .ta \w'OPENWINHOME   'u
-152
-% chsh
-Old shell: /usr/local/bin/tcsh
+$ chsh
+Old shell: /bin/bash
 New shell: /usr/local/bin/esh
-% cat /etc/environ
+$ cat /etc/environ
 PATH	.:/usr/local/bin:/bin:/usr/ucb:/usr/games
-% cd
-% cat >.environ
-SHELL	/usr/local/bin/tcsh
+$ cd
+$ cat >.environ
+SHELL	/bin/bash
 PATH	.:$HOME/bin:$PATH
 ^D
-% login
+$ login
 [...]
-% echo $SHELL
-/usr/local/bin/tcsh
-% echo $PATH
-\&.:/home/lovstrand/bin:/usr/local/bin:/bin:/usr/ucb:/usr/games
-% cat >>.environ
+$ echo $SHELL
+/bin/bash
+$ echo $PATH
+\&.:/home/lovstrand/bin:/usr/local/bin:/bin:/usr/bin
+$ cat >>.environ
 MANPATH	$HOME/man:$MANPATH
 ^D
-% esh -C >foo
-% source foo
-% echo $MANPATH
+$ esh -B >foo
+$ source foo
+$ echo $MANPATH
 /home/lovstrand/man
 .fi
 .SH AUTHOR
