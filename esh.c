@@ -270,12 +270,12 @@ main(argc, argv)
 
     /* add global environment */
     if (Debug)
-	printf("[--system environment--]\n");
+	fprintf(stderr, "[--system environment--]\n");
     readenv(interpret(SysEnvFile, FALSE));
 
     /* add private environment */
     if (Debug)
-	printf("[--user environment--]\n");
+	fprintf(stderr, "[--user environment--]\n");
     readenv(interpret(UsrEnvFile, FALSE));
 
     /* reinterpret args in the environment (if any) */
@@ -388,10 +388,10 @@ main(argc, argv)
     /* the shell is dead, long live the shell! */
     if (Debug) {
 	char **pp;
-	printf("[exec %s:", Shell);
+	fprintf(stderr, "[exec %s:", Shell);
 	for (pp = args; *pp != NULL; pp++)
-	    printf(" %s", *pp);
-	printf("]\n");
+	    fprintf(stderr, " %s", *pp);
+	fprintf(stderr, "]\n");
     }
 #ifdef DEBUGTIME
     (void) ftime(&after);
@@ -755,17 +755,6 @@ readbinding(stream)
 		    n = name;
 		    inexec = FALSE;
 
-		} else if (!inexec && *p == '`') {
-		    /* The start of a `...` expression. */
-		    inexec = TRUE;
-		    endexec = *p;
-
-		} else if (!inexec && *p == '$' && p[1] == '(') {
-		    /* The start of a $(...) expression */
-		    p++;
-		    inexec = TRUE;
-		    endexec = ')';
-
 		} else if (!intest && *p == '[') {
 		    /* The start of a [...] test (q.v.) */
 		    intest = TRUE;
@@ -779,12 +768,25 @@ readbinding(stream)
 			*n++ = ']';
 		    }
 		    *n = '\0';
+		    if (Debug)
+			fprintf(stderr, "# test: %s\n", name);
 		    if (ignore && system(name) == 0) {
 			ignore = FALSE;
 			break;
 		    }
 		    n = name;
 		    intest = FALSE;
+
+		} else if (!inexec && !intest && *p == '`') {
+		    /* The start of a `...` expression. */
+		    inexec = TRUE;
+		    endexec = *p;
+
+		} else if (!inexec && !intest && *p == '$' && p[1] == '(') {
+		    /* The start of a $(...) expression */
+		    p++;
+		    inexec = TRUE;
+		    endexec = ')';
 
 		} else if (n < &name[sizeof(name)-1]) {
 		    /* Inside of something, keep copying it to the name buf */
