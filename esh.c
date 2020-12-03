@@ -55,6 +55,7 @@ enum {
     CSH_FORMAT,
     LISP_FORMAT,
     TEXT_FORMAT,
+    ZSH_FORMAT = SH_FORMAT,
 };
 
 enum editop {
@@ -88,9 +89,11 @@ usage(code, name)
      int code;
      char *name;
 {
-    fprintf(stderr, "usage: %s [-A args] [-B | -C | -T | -X] [-D] "
-	    "[-E sysenv] [-F usrenv] [-H] [-K] [-L | -N] [-P] [-S shell] "
-	    "[-V] [shell-args...]\n", name);
+    fprintf(stderr, "usage: %s {-H | -K | -V}\n", name);
+    fprintf(stderr, "       %s [-D] [-E sysenv] [-F usrenv] "
+	    "{-B | -C | -T | -X | -Z}\n", name);
+    fprintf(stderr, "       %s [-D] [-E sysenv] [-F usrenv] "
+	    "[-L | -N] [-S shell] [shell-args ...]\n", name);
     fprintf(stderr, "\n"
             "where:\n"
             //"  -A args   break up the <args> string and pass it to the shell\n"
@@ -98,18 +101,22 @@ usage(code, name)
             "  -C        print out bindings in csh format\n"
             "  -D        turn on debug output\n"
             "  -E file   read the system environment from <file>\n"
-	    "            (instead of " SYSENVFILE ")\n"
+	    "            (default: " SYSENVFILE ")\n"
             "  -F file   read the user's environment from <file>\n"
-	    "            (instead of " USRENVFILE ")\n"
+	    "            (default: " USRENVFILE ")\n"
             "  -H        print this usage help\n"
             "  -K        list all automatically enabled keywords\n"
             "  -L        pretend to be a login shell\n"
             "  -N        pretend to be a normal (non-login) shell\n"
             "  -P        automatically prune paths by removing duplicates\n"
-            "  -S shell  use the <shell> instead of $SHELL\n"
+            "  -S shell  execute <shell> after setting up the environment\n"
+	    "            (default: ~/.shell or $SHELL)\n"
             "  -T        print out bindings in plain text format\n"
             "  -V        print out the current version number\n"
-            "  -X        print out bindings in GNU Emacs LISP format\n");
+            "  -X        print out bindings in GNU Emacs LISP format\n"
+	    "  -Z        print out bindings in zsh format\n"
+	    );
+
     exit(code);
 }
 
@@ -197,6 +204,7 @@ int procargs(int argc, char **argv)
 		  case 'T': ShellOut = TEXT_FORMAT; break;
 		  case 'V': printversion(); exit(0); break;
 		  case 'X': ShellOut = LISP_FORMAT; break;
+		  case 'Z': ShellOut = ZSH_FORMAT; break;
 		  default:
 		    if (opt[-1] != '-')
 			usage(EX_USAGE, argv[0]);
