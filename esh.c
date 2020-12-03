@@ -1,5 +1,5 @@
 /**
- **	ESH version 1.8
+ **	ESH version 1.9
  **
  **	The Environmental Meta Shell is intended as an intermediary between
  **	/bin/login and the user's real shell.  Its purpose is to set up a
@@ -12,7 +12,7 @@
  **	in /etc/passwd and will take the real shell from the user's SHELL
  **	environment variable, or from the user's ~/.shell file.
  **
- **	Copyright (c) 1990-2017, Lennart Lovstrand <esh@lenlolabs.com>
+ **	Copyright (c) 1990-2020, Lennart Lovstrand <esh@lenlolabs.com>
  **
  **/
 
@@ -30,11 +30,12 @@
 #include <pwd.h>
 #include <sysexits.h>
 
-#define ESHVERSION	"1.8"
+#define ESHVERSION	"1.9"
 
-#define	SYSENVFILE	(ETCDIR "/environ")
+#define	SYSENVFILE	ETCDIR "/environ"
 #define USRENVFILE	"$HOME/.environ"
-#define SYSSHELL	"${SHELL-/bin/bash}"
+#define DEFSHELL	"/bin/sh"
+#define SYSSHELL	"${SHELL-" DEFSHELL "}"
 #define USRSHELL	"$HOME/.shell"
 #define DEBUGFILE	"$HOME/.eshdebug"
 #define BIGBUFSIZ	8192
@@ -42,14 +43,19 @@
 #define REARGSIZ	64
 #define MAXKEYWORDS	64
 
-#define TRUE		1
-#define FALSE		0
+#define ESH_COUNTER	"_ESH_RUN_COUNTER"
+#define ESH_MAX_RECURSION 99
 
-#define NO_FORMAT	0
-#define SH_FORMAT	1
-#define CSH_FORMAT	2
-#define LISP_FORMAT	3
-#define TEXT_FORMAT	4
+#define FALSE		0
+#define TRUE		(!FALSE)
+
+enum {
+    NO_FORMAT =  0,
+    SH_FORMAT,
+    CSH_FORMAT,
+    LISP_FORMAT,
+    TEXT_FORMAT,
+};
 
 enum editop {
     OP_DEFAULT,
@@ -85,6 +91,25 @@ usage(code, name)
     fprintf(stderr, "usage: %s [-A args] [-B | -C | -T | -X] [-D] "
 	    "[-E sysenv] [-F usrenv] [-H] [-K] [-L | -N] [-P] [-S shell] "
 	    "[-V] [shell-args...]\n", name);
+    fprintf(stderr, "\n"
+            "where:\n"
+            //"  -A args   break up the <args> string and pass it to the shell\n"
+            "  -B        print out bindings in bash format\n"
+            "  -C        print out bindings in csh format\n"
+            "  -D        turn on debug output\n"
+            "  -E file   read the system environment from <file>\n"
+	    "            (instead of " SYSENVFILE ")\n"
+            "  -F file   read the user's environment from <file>\n"
+	    "            (instead of " USRENVFILE ")\n"
+            "  -H        print this usage help\n"
+            "  -K        list all automatically enabled keywords\n"
+            "  -L        pretend to be a login shell\n"
+            "  -N        pretend to be a normal (non-login) shell\n"
+            "  -P        automatically prune paths by removing duplicates\n"
+            "  -S shell  use the <shell> instead of $SHELL\n"
+            "  -T        print out bindings in plain text format\n"
+            "  -V        print out the current version number\n"
+            "  -X        print out bindings in GNU Emacs LISP format\n");
     exit(code);
 }
 
@@ -157,7 +182,7 @@ int procargs(int argc, char **argv)
 	} else {
 	    for (opt++; *opt != '\0'; opt++) {
 		switch (*opt) {
-		  case 'A': rearg(&argc, &argv, &argi); break;
+		    //case 'A': rearg(&argc, &argv, &argi); break;
 		  case 'B': ShellOut = SH_FORMAT; break;
 		  case 'C': ShellOut = CSH_FORMAT; break;
 		  case 'D': Debug = !Debug; break;
@@ -191,11 +216,11 @@ printenv(char *var, char *val)
 {
     switch (ShellOut) {
       case SH_FORMAT:
-	printf("%s=", var);
+	printf("export %s=", var);
 	if (val != NULL) {
 	    fprintq(stdout, val);
 	}
-	printf("; export %s\n", var);
+	putchar('\n');
 	break;
 
       case CSH_FORMAT:
@@ -219,7 +244,7 @@ printenv(char *var, char *val)
       case TEXT_FORMAT:
 	printf("%s", var);
 	if (val != NULL) {
-	    printf("\t%s", val);
+	    printf("=%s", val);
 	}
 	putchar('\n');
 	break;
@@ -260,12 +285,33 @@ main(argc, argv)
 	fprintf(stderr, "\n");
     }
 
-    /* copy old environment into a large enough buffer and replace it */
+    int counter = 0;
+
+    /* copy old environment into a large enough buffer and replace it
+     * all while looking out for a recursive application of ourselves
+     */
     for (ee = oldenv; *ee != NULL; ee++) {
-	/* avoid infinite recursion -- ignore any SHELL=esh binding */
-	if (strncmp(*ee, "SHELL=", 6) != 0) {
+	if (strncmp(*ee, ESH_COUNTER "=", sizeof(ESH_COUNTER)) == 0) {
+	    counter = atoi(*ee + sizeof(ESH_COUNTER));
+	} else {
 	    editenv(OP_APPEND, *ee);
 	}
+    }
+
+    /* Check for infinite recursion (or at least enough recursive
+     * applications to be suspicious).
+     */
+    if (counter > ESH_MAX_RECURSION) {
+	fprintf(stderr,
+		"%s: shell recursion detected: SHELL is pointing to %s.\n"
+		"Please set SHELL or ~/.shell to the real shell.\n"
+		"Transferring control to emergency shell %s...\n",
+		argv[0], argv[0], DEFSHELL);
+	execv(DEFSHELL, argv);
+    } else {
+	char tmpbuf[sizeof(ESH_COUNTER) + 10];
+	snprintf(tmpbuf, sizeof(tmpbuf), "%s=%d", ESH_COUNTER, counter + 1);
+	editenv(OP_APPEND, strdup(tmpbuf));
     }
 
     /* add global environment */
@@ -679,10 +725,12 @@ readbinding(stream)
     char *name, *value;
     int pathp = FALSE;
     int ignore = FALSE;
+    int comment_level, new_comment_level = 0;
 
     name = value = NULL;
     b = buf;
     while (fgets(b, buf + sizeof(buf) - b, stream) != NULL) {
+	comment_level = new_comment_level;
 
 	/* find newline and nuke it */
 	p = strchr(b, '\n');
@@ -698,6 +746,10 @@ readbinding(stream)
 	    if (*p == '\\' && p[1] == '#')
 		p++;
 	    else if (*p == '#') {
+		if (p[1] == '<')
+		    new_comment_level = comment_level + 1;
+		else if (p[1] == '>')
+		    new_comment_level = comment_level - 1;
 		break;
 	    }
 	}
@@ -706,6 +758,10 @@ readbinding(stream)
 	while (p > b && isspace(p[-1]) && (p == b + 1 || p[-2] != '\\'))
 	    p--;
 	*p = '\0';
+
+	/* are we in a #<...#> multiline block? */
+	if (comment_level > 0)
+	    continue;
 
 	p = b;
 	/* skip leading spaces */

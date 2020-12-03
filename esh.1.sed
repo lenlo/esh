@@ -82,13 +82,14 @@ follows:
 		<continued_value>]
 .fi
 That is, an environment variable name should be followed by whitespace or an
-equal sign and a value.  Values that don't fit on one line may be continued on
-the next one if the current line ends with a backslash (\\).  Comments may
+equal sign and a value. Values that don't fit on one line may be continued on
+the next one if the current line ends with a backslash (\\). Comments may
 appear anywhere on the line by inserting a hash sign (#) and goes on until the
-end of the line.  Values may include other the value of other variables by the
-usual $VARIABLE syntax or to the output a program by enclosing it in
-backquotes (`).  Finally, backslashes may be used to quote any other character,
-except newline.
+end of the line. Multiline comments are begins with #< and ends with #>; all
+lines between #< ... #> will be ignored. Values may include other the value of
+other variables by the usual $VARIABLE syntax or to the output a program by
+enclosing it in backquotes (`). Finally, backslashes may be used to quote any
+other character, except newline.
 .sp
 .nf
 .ta 0.5i +\w'OPENWINHOME   'u +\w'/usr/openwin   'u
@@ -170,7 +171,7 @@ SHELL environment variable (or by looking at the user's .shell file, if one
 exists).
 .TP
 .B \-T
-Don't create a new shell, just print out the environment bindings in text format with tabs separating each variable from its value.
+Don't create a new shell, just print out the environment bindings in text format with '=' separating each variable from its value.
 .TP
 .B \-X
 Don't create a new shell, just print out the environment bindings in
