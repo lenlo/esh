@@ -317,7 +317,7 @@ main(argc, argv)
 		argv[0], argv[0], DEFSHELL);
 	execv(DEFSHELL, argv);
     } else {
-	char tmpbuf[sizeof(ESH_COUNTER) + 10];
+	char tmpbuf[sizeof(ESH_COUNTER) + 32];
 	snprintf(tmpbuf, sizeof(tmpbuf), "%s=%d", ESH_COUNTER, counter + 1);
 	editenv(OP_APPEND, strdup(tmpbuf));
     }
