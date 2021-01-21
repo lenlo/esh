@@ -1,16 +1,25 @@
 /**
  **	ESH version 2.0
  **
- **	The Environmental Meta Shell is intended as an intermediary between
- **	/bin/login and the user's real shell.  Its purpose is to set up a
- **	common environment for all users on a particular system that can
- **	easily be changed by the superuser as needed.
+ **	The purpose of the Environmental Meta Shell is to set up a user's
+ **	environment by combining a set of system wide settings in /etc/environ
+ **	together with the user's personal settings in ~/.environ.
  **
- **	By default, esh will modify the already existing environment by
- **	reading bindings from /etc/environ before exec'ing the user's
- **	personal shell.  It is intended to replace the user's real shell
- **	in /etc/passwd and will take the real shell from the user's SHELL
- **	environment variable, or from the user's ~/.shell file.
+ **	There are two main application modes:
+ **
+ **	1. It can be used as a login shell in /etc/passwd, in which case it is
+ **	   executed immediately after the user logs in and then transfers
+ **	   control to the user's real shell as indicated by a ~/.shell
+ **	   file/symlink or SHELL variable, or:
+ **
+ **	2. It can be called from the user's shell init file and asked to print
+ **	   out the resulting environment settings in a form that can be
+ **	   sourced directly by the shell.
+ **
+ **     The user's ~/.environ file can be shared across multiple systems and
+ **     parts of it can easily be made conditional on the system on which it
+ **     is used. For details on the environment file format, see the esh.1
+ **     manual and the supplied example file.
  **
  **	Copyright (c) 1990-2021, Lennart Lovstrand <esh@lenlolabs.com>
  **
@@ -86,7 +95,8 @@ char *UsrEnvFile = USRENVFILE;
 char *Shell = NULL;
 int ShellOut = NO_FORMAT;
 int AutoPrunePaths = FALSE;
-int ExitOnReapplication = FALSE;
+int ResetOldEnvironment = FALSE;
+int ForceNewEnvironment = FALSE;
 
 void
 usage(code, name)
@@ -114,6 +124,7 @@ usage(code, name)
             "  -L        pretend to be a login shell\n"
             "  -N        pretend to be a normal (non-login) shell\n"
             "  -P        automatically prune paths by removing duplicates\n"
+	    "  -R        reset by suppressing inherited environment\n"
             "  -S shell  execute <shell> after setting up the environment\n"
 	    "            (default: ~/.shell or $SHELL)\n"
             "  -T        print out bindings in plain text format\n"
@@ -204,12 +215,13 @@ int procargs(int argc, char **argv)
 		  case 'I': ShellOut = LISP_FORMAT; break;
 		  case 'K': list_keywords(); exit(0); break;
 		  case 'L': argv[0][0] = '-'; break;
-		  case 'N': if (argv[0][0] == '-') argv[0][0] = 'x'; break;
+		  case 'N': ForceNewEnvironment = TRUE; break;
 		  case 'P': AutoPrunePaths = TRUE; break;
+		  case 'R': ResetOldEnvironment = TRUE; break;
 		  case 'S': Shell = argopt(argc, argv, &argi); break;
 		  case 'T': ShellOut = TEXT_FORMAT; break;
 		  case 'V': printversion(); exit(0); break;
-		  case 'X': ExitOnReapplication = TRUE; break;
+		  case 'X': if (argv[0][0] == '-') argv[0][0] = 'x'; break;
 		  case 'Z': ShellOut = ZSH_FORMAT; break;
 		  default:
 		    if (opt[-1] != '-')
@@ -311,18 +323,14 @@ main(argc, argv)
 	} else {
 	    if (strncmp(*ee, MAX_COUNT_VAR "=", sizeof(MAX_COUNT_VAR)) == 0)
 		max_count = atoi(*ee + sizeof(MAX_COUNT_VAR));
-	    editenv(OP_APPEND, *ee);
+	    if (!ResetOldEnvironment)
+		editenv(OP_APPEND, *ee);
 	}
     }
 
     /* Check for possibly infinite recursion (or at least enough recursive
      * applications to be suspicious).
      */
-    if (ExitOnReapplication && run_count > 0) {
-	if (Debug)
-	    fprintf(stderr, "Exiting on reapplication\n");
-	return 0;
-    }
     if (max_count > 0 && run_count > max_count) {
 	fprintf(stderr,
 		"%s: shell recursion detected: SHELL is pointing to %s.\n"
@@ -336,26 +344,31 @@ main(argc, argv)
 	editenv(OP_APPEND, strdup(tmpbuf));
     }
 
-    /* add global environment */
-    if (Debug)
-	fprintf(stderr, "[--system environment--]\n");
-    readenv(interpret(SysEnvFile, FALSE));
+    /* Avoid re-interpreting the environment if it already has been set up
+     * (unless we're forced to do it anyway).
+     */
+    if (run_count == 0 || ForceNewEnvironment) {
+	/* add global environment */
+	if (Debug)
+	    fprintf(stderr, "[--system environment--]\n");
+	readenv(interpret(SysEnvFile, FALSE));
 
-    /* add private environment */
-    if (Debug)
-	fprintf(stderr, "[--user environment--]\n");
-    readenv(interpret(UsrEnvFile, FALSE));
+	/* add private environment */
+	if (Debug)
+	    fprintf(stderr, "[--user environment--]\n");
+	readenv(interpret(UsrEnvFile, FALSE));
 
-    /* reinterpret args in the environment (if any) */
-    envflags = interpret(getenv(ESHFLAGS_VAR), FALSE);
-    if (envflags != NULL) {
-	char *xargs[] = {argv[0], envflags, NULL};
-	char **xargv = xargs;
-	int xargc = 2;
-	int xargi = 1;
+	/* reinterpret args in the environment (if any) */
+	envflags = interpret(getenv(ESHFLAGS_VAR), FALSE);
+	if (envflags != NULL) {
+	    char *xargs[] = {argv[0], envflags, NULL};
+	    char **xargv = xargs;
+	    int xargc = 2;
+	    int xargi = 1;
 
-	rearg(&xargc, &xargv, &xargi);
-	(void) procargs(xargc, xargv);
+	    rearg(&xargc, &xargv, &xargi);
+	    (void) procargs(xargc, xargv);
+	}
     }
 
     /*
