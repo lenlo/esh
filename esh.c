@@ -1,5 +1,5 @@
 /**
- **	ESH version 1.9
+ **	ESH version 2.0
  **
  **	The Environmental Meta Shell is intended as an intermediary between
  **	/bin/login and the user's real shell.  Its purpose is to set up a
@@ -12,7 +12,7 @@
  **	in /etc/passwd and will take the real shell from the user's SHELL
  **	environment variable, or from the user's ~/.shell file.
  **
- **	Copyright (c) 1990-2020, Lennart Lovstrand <esh@lenlolabs.com>
+ **	Copyright (c) 1990-2021, Lennart Lovstrand <esh@lenlolabs.com>
  **
  **/
 
@@ -30,7 +30,7 @@
 #include <pwd.h>
 #include <sysexits.h>
 
-#define ESHVERSION	"1.9"
+#define ESHVERSION	"2.0"
 
 #define	SYSENVFILE	ETCDIR "/environ"
 #define USRENVFILE	"$HOME/.environ"
@@ -43,8 +43,11 @@
 #define REARGSIZ	64
 #define MAXKEYWORDS	64
 
-#define ESH_COUNTER	"_ESH_RUN_COUNTER"
-#define ESH_MAX_RECURSION 99
+#define ESHFLAGS_VAR	"ESHFLAGS"
+#define AUTO_PRUNE_VAR	"ESH_AUTO_PRUNE_PATHS"
+#define RUN_COUNT_VAR	"ESH_RUN_COUNT"
+#define MAX_COUNT_VAR	"ESH_MAX_COUNT"
+#define MAX_COUNT_DEF	99
 
 #define FALSE		0
 #define TRUE		(!FALSE)
@@ -83,6 +86,7 @@ char *UsrEnvFile = USRENVFILE;
 char *Shell = NULL;
 int ShellOut = NO_FORMAT;
 int AutoPrunePaths = FALSE;
+int ExitOnReapplication = FALSE;
 
 void
 usage(code, name)
@@ -91,7 +95,7 @@ usage(code, name)
 {
     fprintf(stderr, "usage: %s {-H | -K | -V}\n", name);
     fprintf(stderr, "       %s [-D] [-E sysenv] [-F usrenv] "
-	    "{-B | -C | -T | -X | -Z}\n", name);
+	    "{-B | -C | -I | -T | -Z}\n", name);
     fprintf(stderr, "       %s [-D] [-E sysenv] [-F usrenv] "
 	    "[-L | -N] [-S shell] [shell-args ...]\n", name);
     fprintf(stderr, "\n"
@@ -105,6 +109,7 @@ usage(code, name)
             "  -F file   read the user's environment from <file>\n"
 	    "            (default: " USRENVFILE ")\n"
             "  -H        print this usage help\n"
+            "  -I        print out bindings in GNU Emacs LISP format\n"
             "  -K        list all automatically enabled keywords\n"
             "  -L        pretend to be a login shell\n"
             "  -N        pretend to be a normal (non-login) shell\n"
@@ -112,8 +117,8 @@ usage(code, name)
             "  -S shell  execute <shell> after setting up the environment\n"
 	    "            (default: ~/.shell or $SHELL)\n"
             "  -T        print out bindings in plain text format\n"
+	    "  -X        exit if the environment already has been set up\n"
             "  -V        print out the current version number\n"
-            "  -X        print out bindings in GNU Emacs LISP format\n"
 	    "  -Z        print out bindings in zsh format\n"
 	    );
 
@@ -196,6 +201,7 @@ int procargs(int argc, char **argv)
 		  case 'E': SysEnvFile = argopt(argc, argv, &argi); break;
 		  case 'F': UsrEnvFile = argopt(argc, argv, &argi); break;
 		  case 'H': usage(0, argv[0]); break;
+		  case 'I': ShellOut = LISP_FORMAT; break;
 		  case 'K': list_keywords(); exit(0); break;
 		  case 'L': argv[0][0] = '-'; break;
 		  case 'N': if (argv[0][0] == '-') argv[0][0] = 'x'; break;
@@ -203,7 +209,7 @@ int procargs(int argc, char **argv)
 		  case 'S': Shell = argopt(argc, argv, &argi); break;
 		  case 'T': ShellOut = TEXT_FORMAT; break;
 		  case 'V': printversion(); exit(0); break;
-		  case 'X': ShellOut = LISP_FORMAT; break;
+		  case 'X': ExitOnReapplication = TRUE; break;
 		  case 'Z': ShellOut = ZSH_FORMAT; break;
 		  default:
 		    if (opt[-1] != '-')
@@ -293,23 +299,31 @@ main(argc, argv)
 	fprintf(stderr, "\n");
     }
 
-    int counter = 0;
+    int run_count = 0;
+    int max_count = MAX_COUNT_DEF;
 
     /* copy old environment into a large enough buffer and replace it
      * all while looking out for a recursive application of ourselves
      */
     for (ee = oldenv; *ee != NULL; ee++) {
-	if (strncmp(*ee, ESH_COUNTER "=", sizeof(ESH_COUNTER)) == 0) {
-	    counter = atoi(*ee + sizeof(ESH_COUNTER));
+	if (strncmp(*ee, RUN_COUNT_VAR "=", sizeof(RUN_COUNT_VAR)) == 0) {
+	    run_count = atoi(*ee + sizeof(RUN_COUNT_VAR));
 	} else {
+	    if (strncmp(*ee, MAX_COUNT_VAR "=", sizeof(MAX_COUNT_VAR)) == 0)
+		max_count = atoi(*ee + sizeof(MAX_COUNT_VAR));
 	    editenv(OP_APPEND, *ee);
 	}
     }
 
-    /* Check for infinite recursion (or at least enough recursive
+    /* Check for possibly infinite recursion (or at least enough recursive
      * applications to be suspicious).
      */
-    if (counter > ESH_MAX_RECURSION) {
+    if (ExitOnReapplication && run_count > 0) {
+	if (Debug)
+	    fprintf(stderr, "Exiting on reapplication\n");
+	return 0;
+    }
+    if (max_count > 0 && run_count > max_count) {
 	fprintf(stderr,
 		"%s: shell recursion detected: SHELL is pointing to %s.\n"
 		"Please set SHELL or ~/.shell to the real shell.\n"
@@ -317,8 +331,8 @@ main(argc, argv)
 		argv[0], argv[0], DEFSHELL);
 	execv(DEFSHELL, argv);
     } else {
-	char tmpbuf[sizeof(ESH_COUNTER) + 32];
-	snprintf(tmpbuf, sizeof(tmpbuf), "%s=%d", ESH_COUNTER, counter + 1);
+	char tmpbuf[sizeof(RUN_COUNT_VAR) + 32];
+	snprintf(tmpbuf, sizeof(tmpbuf), "%s=%d", RUN_COUNT_VAR, run_count + 1);
 	editenv(OP_APPEND, strdup(tmpbuf));
     }
 
@@ -333,7 +347,7 @@ main(argc, argv)
     readenv(interpret(UsrEnvFile, FALSE));
 
     /* reinterpret args in the environment (if any) */
-    envflags = interpret(getenv("ESHFLAGS"), FALSE);
+    envflags = interpret(getenv(ESHFLAGS_VAR), FALSE);
     if (envflags != NULL) {
 	char *xargs[] = {argv[0], envflags, NULL};
 	char **xargv = xargs;
@@ -712,7 +726,7 @@ int conditional(const char *name)
 int
 auto_prune_paths()
 {
-    return AutoPrunePaths || (getenv("ESH_AUTO_PRUNE_PATHS") != NULL);
+    return AutoPrunePaths || (getenv(AUTO_PRUNE_VAR) != NULL);
 }
 
 /*
@@ -734,6 +748,7 @@ readbinding(stream)
     int pathp = FALSE;
     int ignore = FALSE;
     int comment_level, new_comment_level = 0;
+    char in_quote = '\0';
 
     name = value = NULL;
     b = buf;
@@ -751,14 +766,20 @@ readbinding(stream)
 
 	/* find unquoted sharp (#) and nuke rest of line */
 	for (p = b; *p != '\0'; p++) {
-	    if (*p == '\\' && p[1] == '#')
+	    if (*p == '\\' && p[1] != '\0')
 		p++;
-	    else if (*p == '#') {
-		if (p[1] == '<')
-		    new_comment_level = comment_level + 1;
-		else if (p[1] == '>')
-		    new_comment_level = comment_level - 1;
-		break;
+	    else if (*p == in_quote)
+		in_quote = '\0';
+	    else if (in_quote == '\0') {
+		if (*p == '\'' || *p == '"')
+		    in_quote = *p;
+		else if (*p == '#') {
+		    if (p[1] == '<')
+			new_comment_level = comment_level + 1;
+		    else if (p[1] == '>')
+			new_comment_level = comment_level - 1;
+		    break;
+		}
 	    }
 	}
 
