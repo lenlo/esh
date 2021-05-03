@@ -1,5 +1,5 @@
 /**
- **	ESH version 2.0
+ **	ESH version 2.1
  **
  **	The purpose of the Environmental Meta Shell is to set up a user's
  **	environment by combining a set of system wide settings in /etc/environ
@@ -39,7 +39,7 @@
 #include <pwd.h>
 #include <sysexits.h>
 
-#define ESHVERSION	"2.0"
+#define ESHVERSION	"2.1"
 
 #define	SYSENVFILE	ETCDIR "/environ"
 #define USRENVFILE	"$HOME/.environ"
@@ -81,8 +81,9 @@ extern char **environ;
 
 char *readbinding(FILE *), *interpret(char *, int), *newstr(char *);
 char **bassoc(const char *, char **), *mkbind(char *, char *);
-void readenv(char *), fprintq(FILE *, char *), expand(char **, char **, int);
-void compute(char **, char **, int), init_keywords(void), list_keywords(void);
+void readenv(char *), fprintq(FILE *, char *), tilde(char **, char **, int);
+void expand(char **, char **, int), compute(char **, char **, int);
+void init_keywords(void), list_keywords(void);
 void *xalloc(void *mem, long siz);
 void editenv(enum editop op, const char *binding);
 
@@ -122,13 +123,13 @@ usage(code, name)
             "  -I        print out bindings in GNU Emacs LISP format\n"
             "  -K        list all automatically enabled keywords\n"
             "  -L        pretend to be a login shell\n"
-            "  -N        pretend to be a normal (non-login) shell\n"
+            "  -N        force a new environment even if esh already has run\n"
             "  -P        automatically prune paths by removing duplicates\n"
 	    "  -R        reset by suppressing inherited environment\n"
             "  -S shell  execute <shell> after setting up the environment\n"
 	    "            (default: ~/.shell or $SHELL)\n"
             "  -T        print out bindings in plain text format\n"
-	    "  -X        exit if the environment already has been set up\n"
+	    "  -X        pretend to be a normal (non-login) shell\n"
             "  -V        print out the current version number\n"
 	    "  -Z        print out bindings in zsh format\n"
 	    );
@@ -259,7 +260,7 @@ printenv(char *var, char *val)
 	break;
 
       case LISP_FORMAT:
-	printf("(setenv \"%s\"", var);
+	printf("  (setenv \"%s\"", var);
 	if (val != NULL) {
 	    putchar(' ');
 	    fprintq(stdout, val);
@@ -413,6 +414,8 @@ main(argc, argv)
      *  Only do shell source output?
      */
     if (ShellOut != NO_FORMAT) {
+	if (ShellOut == LISP_FORMAT)
+	    printf("(progn\n");
 	for (ee = environ; *ee != NULL; ee++) {
 	    /* Don't print out old bindings that we haven't changed */
 	    for (; *oldenv != NULL; oldenv++) {
@@ -431,6 +434,8 @@ main(argc, argv)
 		*p = '=';
 	    }
 	}
+	if (ShellOut == LISP_FORMAT)
+	    printf(")\n");
 
 	exit(0);
     }
@@ -993,6 +998,10 @@ interpret(string, pathcompress)
 	char *oq = q;
 
 	switch (*p++) {
+	  case '~':
+	    tilde(&p, &q, &buf[sizeof(buf)] - q);
+	    break;
+
 	  case '$':
 	    if (*p != '(') {
 		expand(&p, &q, &buf[sizeof(buf)] - q);
@@ -1042,6 +1051,50 @@ interpret(string, pathcompress)
     *q = '\0';
 
     return buf;
+}
+
+/*
+ *	Expand ~[username] to their home directory
+ *	(or leave as-is if the user is unknown).
+ */
+
+void
+tilde(src, dst, dstlen)
+    char **src, **dst;
+    int dstlen;
+{
+    char *p = *src;
+    struct passwd *pw;
+
+    /* Scan username */
+    while (isalnum(*p) || *p == '_' || *p == '-' || *p == '.') p++;
+
+    if (*p == **src) {
+	pw = getpwuid(getuid());
+    } else {
+	int len = p - *src;
+	char tmp[len + 1];
+	memcpy(tmp, *src, len);
+	tmp[len] = '\0';
+	pw = getpwnam(tmp);
+    }
+
+    if (pw == NULL) {
+	if (dstlen > 0)
+	    *(*dst++) = '~';
+	p = *src;
+    } else {
+	int len = strlen(pw->pw_dir);
+
+	if (len > dstlen)
+	    len = dstlen;
+
+	memcpy(*dst, pw->pw_dir, len);
+
+	*dst += len;
+    }
+
+    *src = p;
 }
 
 /*
