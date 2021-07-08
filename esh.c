@@ -38,6 +38,7 @@
 #endif /* DEBUGTIME */
 #include <pwd.h>
 #include <sysexits.h>
+#include <sys/param.h>
 
 #define ESHVERSION	"2.1"
 
@@ -570,20 +571,54 @@ static char *keywords[MAXKEYWORDS] = {
     "all",
 
     /* operating systems */
-#ifdef __linux__
-    "linux",
+#ifdef __AIX
+    "aix",
+#endif
+#ifdef __ANDROID__
+    "android",
 #endif
 #ifdef __APPLE__
     "apple",
-#endif	
+#include <TargetConditionals.h>
+#if TARGET_OS_IPHONE || TARGET_IPHONE_SIMULATOR
+    "iphone",
+    "ios",
+#elif TARGET_OS_MAC
+    "osx",
+    "macos",
+#endif // !TARGET_OS_MAC
+#endif // __APPLE_
 #ifdef DARWIN
     "darwin",
+#endif
+#ifdef __hpux
+    "hp-ux",
+#endif
+#ifdef __linux__
+    "linux",
 #endif
 #ifdef __MACH__
     "mach",
 #endif
+#ifdef __sun
+#ifdef __SVR4
+    "solaris",
+#else
+    "sunos",
+#endif // !__SVR4
+#endif // __sun
 #ifdef __unix__
     "unix",
+#ifdef BSD
+    "bsd",
+#endif // BSD
+#endif
+#ifdef _WIN32
+    "win32",
+    "windows",
+#elsif defined(_WIN64)
+    "win64",
+    "windows",
 #endif
 
 	/* architectures */
