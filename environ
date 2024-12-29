@@ -72,6 +72,13 @@
 #  incrementally build paths using constructs like "FOO $FOO:...".
 #
 
+# Define internal keys for use in [...] selectors
+= $USER			# Current user
+= $(?hostname)		# Current host
+= $(?hostname -f)	# FQDN
+= $(?uname)		# System (OS) name, e.g. Linux or Darwin
+= $(?arch)		# Architecture, e.g. x86_64 or arm64
+
 ESH_AUTO_PRUNE_PATHS
 
 ?MANPATH	/usr/share/man

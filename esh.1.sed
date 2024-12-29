@@ -82,14 +82,15 @@ follows:
 		<continued_value>]
 .fi
 That is, an environment variable name should be followed by whitespace or an
-equal sign and a value. Values that don't fit on one line may be continued on
-the next one if the current line ends with a backslash (\\). Comments may
-appear anywhere on the line by inserting a hash sign (#) and goes on until the
-end of the line. Multiline comments are begins with #< and ends with #>; all
-lines between #< ... #> will be ignored. Values may include other the value of
-other variables by the usual $VARIABLE syntax or to the output a program by
-enclosing it in backquotes (`). Finally, backslashes may be used to quote any
-other character, except newline.
+equal sign and a value. Values that don't fit on one line may be continued
+on the next one if the current line ends with a backslash (\\). Comments may
+appear anywhere on the line by inserting a hash sign (#) and goes on until
+the end of the line. Multiline comments are begins with #< and ends with #>;
+all lines between #< ... #> will be ignored. Values may include other the
+value of other variables by the usual $VARIABLE syntax or to the output a
+program by enclosing it in $(...) or backquotes (`...`). Errors are ignored
+if the command is prefixed by a question mark (?). Finally, backslashes may
+be used to quote any other character, except newline.
 .sp
 .nf
 .ta 0.5i +\w'OPENWINHOME   'u +\w'/usr/openwin   'u

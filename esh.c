@@ -72,6 +72,7 @@ enum {
 };
 
 enum editop {
+    OP_KEYWORD,
     OP_DEFAULT,
     OP_REPLACE,
     OP_REMOVE,
@@ -80,11 +81,12 @@ enum editop {
 
 extern char **environ;
 
-char *readbinding(FILE *), *interpret(char *, int), *newstr(char *);
-char **bassoc(const char *, char **), *mkbind(char *, char *);
-void readenv(char *), fprintq(FILE *, char *), tilde(char **, char **, int);
+char *readbinding(FILE *), *interpret(const char *, int), *newstr(const char *);
+char **bassoc(const char *, char **), *mkbind(const char *, const char *);
+void readenv(const char *), fprintq(FILE *, const char *),
+    tilde(char **, char **, int);
 void expand(char **, char **, int), compute(char **, char **, int);
-void init_keywords(void), list_keywords(void);
+void init_keywords(void), list_keywords(void), add_keyword(const char *);
 void *xalloc(void *mem, long siz);
 void editenv(enum editop op, const char *binding);
 
@@ -101,9 +103,7 @@ int ResetOldEnvironment = FALSE;
 int ForceNewEnvironment = FALSE;
 
 void
-usage(code, name)
-     int code;
-     char *name;
+usage(int code, const char *name)
 {
     fprintf(stderr, "usage: %s {-H | -K | -V}\n", name);
     fprintf(stderr, "       %s [-D] [-E sysenv] [-F usrenv] "
@@ -115,7 +115,7 @@ usage(code, name)
             //"  -A args   break up the <args> string and pass it to the shell\n"
             "  -B        print out bindings in bash format\n"
             "  -C        print out bindings in csh format\n"
-            "  -D        turn on debug output\n"
+            "  -D        toggle debug output\n"
             "  -E file   read the system environment from <file>\n"
 	    "            (default: " SYSENVFILE ")\n"
             "  -F file   read the user's environment from <file>\n"
@@ -280,9 +280,7 @@ printenv(char *var, char *val)
 }
 
 int
-main(argc, argv)
-    int argc;
-    char **argv;
+main(int argc, char **argv)
 {
     char **args, **ee, **oldenv = environ;
     char *p, buf[BUFSIZ];
@@ -294,11 +292,11 @@ main(argc, argv)
     (void) ftime(&before);
 #endif /* DEBUGTIME */
 
-    init_keywords();
-
     p = interpret(DEBUGFILE, FALSE);
     if (p != NULL && access(p, F_OK) == 0)
 	Debug = TRUE;
+
+    init_keywords();
 
     argi = procargs(argc, argv);
 
@@ -494,8 +492,7 @@ main(argc, argv)
 }
 
 void
-readenv(file)
-    char *file;
+readenv(const char *file)
 {
     FILE *stream;
     char *binding;
@@ -526,6 +523,10 @@ readenv(file)
 #endif
 
 	switch (*binding) {
+	  case '=':
+	    op = OP_KEYWORD;
+	    binding++;
+	    break;
 	  case '\\':
 	    binding++;
 	    break;
@@ -539,7 +540,10 @@ readenv(file)
 	    break;
 	}
 
-	editenv(op, binding);
+	if (op == OP_KEYWORD)
+	    add_keyword(binding);
+	else
+	    editenv(op, binding);
     }
 
     if (stream != stdin)
@@ -552,8 +556,7 @@ readenv(file)
  *	mkbind("foo", "bar") => "foo=bar"
  */
 char *
-mkbind(name, value)
-    char *name, *value;
+mkbind(const char *name, const char *value)
 {
     char *buf = xalloc(NULL, strlen(name) + 1 + strlen(value) + 1);
 
@@ -616,7 +619,7 @@ static char *keywords[MAXKEYWORDS] = {
 #ifdef _WIN32
     "win32",
     "windows",
-#elsif defined(_WIN64)
+#elif defined(_WIN64)
     "win64",
     "windows",
 #endif
@@ -657,8 +660,11 @@ void add_keyword(const char *word)
     char **kk;
 
     /* Don't add NULL words */
-    if (word == NULL)
+    if (word == NULL || *word == '\0')
 	return;
+
+    if (Debug)
+	fprintf(stderr, "# Adding keyword \"%s\"\n", word);
 
     /* Check if we might already got it */
     for (kk = keywords; *kk != NULL; kk++)
@@ -793,8 +799,7 @@ auto_prune_paths()
  *		=> "name=value#value$value"
  */
 char *
-readbinding(stream)
-    FILE *stream;
+readbinding(FILE *stream)
 {
     char *p, *b, buf[BIGBUFSIZ];
     char *name, *value;
@@ -998,7 +1003,7 @@ readbinding(stream)
 	return NULL;
 
     if (pathp) {
-	extern char *ppath();
+	extern char *ppath(const char *path);
 	char *bind;
 
 	value = ppath(interpret(value, TRUE));
@@ -1015,9 +1020,7 @@ readbinding(stream)
  *	(Result is static shared string)
  */
 char *
-interpret(string, pathcompress)
-    char *string;
-    int pathcompress;
+interpret(const char *string, int pathcompress)
 {
     static char tmp[BIGBUFSIZ];
     static char buf[BIGBUFSIZ];
@@ -1089,14 +1092,12 @@ interpret(string, pathcompress)
 }
 
 /*
- *	Expand ~[username] to their home directory
+ *	Expand ~user to their home directory
  *	(or leave as-is if the user is unknown).
  */
 
 void
-tilde(src, dst, dstlen)
-    char **src, **dst;
-    int dstlen;
+tilde(char **src, char **dst, int dstlen)
 {
     char *p = *src;
     struct passwd *pw;
@@ -1140,9 +1141,7 @@ tilde(src, dst, dstlen)
  *	      with      ^=src      ^=dst
  */
 void
-expand(src, dst, dstlen)
-    char **src, **dst;
-    int dstlen;
+expand(char **src, char **dst, int dstlen)
 {
     register char *p, *q;
     char delim, *value, *defvalue = "";
@@ -1191,9 +1190,7 @@ expand(src, dst, dstlen)
  *	      with         ^=src       ^=dst
  */
 void
-compute(srcp, dstp, dstlen)
-    char **srcp, **dstp;
-    int dstlen;
+compute(char **srcp, char **dstp, int dstlen)
 {
     char *src = *srcp;
     char *dst = *dstp;
@@ -1224,9 +1221,16 @@ compute(srcp, dstp, dstlen)
     delim = *p;
     *p = '\0';
 
+    /* Ignore errors if the command is prefixed by '?' */
+    int ignore_errors = *src == '?';
+
+    if (ignore_errors)
+	src++;
+
     pipe = popen(src, "r");
     if (pipe == NULL) {
-	perror(src);
+	if (!ignore_errors)
+	    perror(src);
     } else {
 	if (fgets(dst, dstlen, pipe) == NULL)
 	    *dst = '\0';
@@ -1252,9 +1256,7 @@ compute(srcp, dstp, dstlen)
  *	    bassoc("baz", {"abc=def", "foo=bar", NULL}) => {NULL}
  */
 char **
-bassoc(key, environ)
-    const char *key;
-    char **environ;
+bassoc(const char *key, char **environ)
 {
     register char **ee;
     register const char *p, *q;
@@ -1299,6 +1301,7 @@ editenv(enum editop op, const char *binding)
 		EnvEnd--;
 		return;
 	      case OP_APPEND:
+	      case OP_KEYWORD:
 		/* To keep the compiler happy... */
 		break;
 	    }
@@ -1320,11 +1323,9 @@ editenv(enum editop op, const char *binding)
  *	Print and automatically quote a string (sh/csh syntax).
  */
 void
-fprintq(stream, string)
-    FILE *stream;
-    char *string;
+fprintq(FILE *stream, const char *string)
 {
-    char *p;
+    const char *p;
 
     if (ShellOut == LISP_FORMAT) {
 	putc('"', stream);
@@ -1350,8 +1351,7 @@ fprintq(stream, string)
  *	Copy the specified string into a newly malloced space.
  */
 char *
-newstr(string)
-    char *string;
+newstr(const char *string)
 {
     int count = strlen(string) + 1;
     return memcpy(xalloc(NULL, count), string, count);
